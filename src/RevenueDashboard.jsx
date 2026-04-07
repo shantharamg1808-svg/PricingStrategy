@@ -80,8 +80,23 @@ function parseCSV(text) {
   return data;
 }
 
+// Location data for rational customer analysis
+const LOCATIONS = [
+      { name: 'Local', distance: 5, days: 1},
+      { name: 'Short', distance: 15, days: 1},
+      { name: 'Medium', distance: 30, days: 1},
+      { name: 'Long', distance: 50, days: 1 },
+      { name: 'Extended', distance: 75, days: 1},
+      { name: 'Far', distance: 100, days: 2},
+      { name: 'Very Far', distance: 150, days: 2},
+      { name: 'Extreme', distance: 200, days: 3},
+      { name: 'Ultra', distance: 300, days: 3},
+      { name: 'Maximum', distance: 400, days: 4},
+      { name: 'Record', distance: 500, days: 4}
+];
+
 // --- OPTIMIZER ENGINE ---
-function simulateScenarioEngine(testKms, testShares, context) {
+function simulateScenarioEngine(testKms, testShares, context, pricingState) {
   const { normCat, normCar, totalBookings, deliveryPct, pickupPct, avgDeliveryFee, totalDepositFloat, avgDiscountPct, taxRatePct, modelType, globalWdDays, globalWeDays, scaledExtraKmRev, scaledExtraHrRev } = context;
   
   let customBaseRev = 0;
@@ -132,7 +147,7 @@ function simulateScenarioEngine(testKms, testShares, context) {
 export default function ProjectionDashboard() {
   const { state: pricingState, dispatch: pricingDispatch } = usePricingStore();
   
-  const [modelType, setModelType] = useState(4); 
+  const [modelType, setModelType] = useState(pricingState.modelType); 
   const [dataSourceMode, setDataSourceMode] = useState('historical'); // 'historical' | 'csv'
   const [parsedCsvData, setParsedCsvData] = useState([]);
   const [csvStats, setCsvStats] = useState(null);
@@ -158,11 +173,7 @@ export default function ProjectionDashboard() {
   const [separateExistDemand, setSeparateExistDemand] = useState(true);
   const [existPkgsShare, setExistPkgsShare] = useState(['32', '46', '16', '6']);
 
-  const [customPkgs, setCustomPkgs] = useState([
-    { id: 'p1', km: '110', share: '25' }, { id: 'p2', km: '220', share: '30' }, { id: 'p3', km: '410', share: '20' }, { id: 'p4', km: '520', share: '15' }, { id: 'p5', km: '720', share: '10' } 
-  ]);
-  
-  const activeCustomPkgs = customPkgs.slice(0, modelType);
+  const activeCustomPkgs = pricingState.packages.slice(0, modelType);
 
   const [showCarWeights, setShowCarWeights] = useState(false);
   const [carWeights, setCarWeights] = useState(() => {
@@ -348,24 +359,10 @@ export default function ProjectionDashboard() {
     const BATCH_SIZE = 250; 
     let currentIteration = 0;
 
-    // Location data for rational customer analysis
-    const LOCATIONS = [
-      { name: 'Local', distance: 5 },
-      { name: 'Short', distance: 15 },
-      { name: 'Medium', distance: 30 },
-      { name: 'Long', distance: 50 },
-      { name: 'Extended', distance: 75 },
-      { name: 'Far', distance: 100 },
-      { name: 'Very Far', distance: 150 },
-      { name: 'Extreme', distance: 200 },
-      { name: 'Ultra', distance: 300 },
-      { name: 'Maximum', distance: 400 },
-      { name: 'Record', distance: 500 }
-    ];
     
     let initialKms = activeCustomPkgs.map(p => Number(p.km)||0);
     let initialShares = activeCustomPkgs.map(p => (Number(p.share)||0)/100);
-    let currentBest = simulateScenarioEngine(initialKms, initialShares, context);
+    let currentBest = simulateScenarioEngine(initialKms, initialShares, context, pricingState);
 
     const processBatch = () => {
       if (!optRef.current) return; 
@@ -399,7 +396,7 @@ export default function ProjectionDashboard() {
         let sumRaw = rawShares.reduce((a,b) => a+b, 0);
         let testShares = rawShares.map(r => r / sumRaw);
 
-        const res = simulateScenarioEngine(testKms, testShares, context);
+        const res = simulateScenarioEngine(testKms, testShares, context, pricingState);
         
         if (res.revenue > currentBest.revenue + 100) {
            currentBest = res; setOptBest({...res}); 
@@ -431,10 +428,10 @@ export default function ProjectionDashboard() {
          return val.toFixed(1);
       });
 
-      setCustomPkgs(prev => prev.map((p, i) => {
+      pricingDispatch({ type: 'SET_PACKAGES', packages: prev.map((p, i) => {
         if (i < modelType) return { ...p, km: String(optBest.pkgs[i]), share: formattedShares[i] };
         return p;
-      }));
+      })});
       setOptBest(null);
       setShowOptModal(false);
     }
@@ -728,7 +725,7 @@ export default function ProjectionDashboard() {
       kmImpact: { existAvgKm, customAvgKm, avgKmDiff: customAvgKm - existAvgKm, avgKmDiffPct: existAvgKm ? ((customAvgKm - existAvgKm) / existAvgKm) * 100 : 0, existTotalMonthlyKm: existAvgKm * safeTotalBookingsFinal, customTotalMonthlyKm: customAvgKm * safeTotalBookingsFinal, monthlyKmDiff: (customAvgKm * safeTotalBookingsFinal) - (existAvgKm * safeTotalBookingsFinal), kmPackageDiffs },
       breakdown, safeCustomPkgsOutput, isCsvMode, safeTotalBookingsFinal, locationBreakdown
     };
-  }, [totalBookings, catSplit, customPkgs, carWeights, deliveryPct, pickupPct, avgDeliveryFee, discountTiers, totalDiscountPct, taxRate, modelType, separateExistDemand, existPkgsShare, baseExtraKmRev, baseExtraHrRev, dataSourceMode, parsedCsvData]);
+  }, [totalBookings, catSplit, pricingState.packages, carWeights, deliveryPct, pickupPct, avgDeliveryFee, discountTiers, totalDiscountPct, taxRate, modelType, separateExistDemand, existPkgsShare, baseExtraKmRev, baseExtraHrRev, dataSourceMode, parsedCsvData]);
 
   const handleGenerateRandom = useCallback(() => {
      const carIds = Object.keys(carWeights).map(Number);
@@ -737,7 +734,7 @@ export default function ProjectionDashboard() {
         const catShare = normalizePercentages(catSplit)[car.category] || 0;
         const catTotals = { 'Hatchbacks & Minis': 0, 'Compact SUVs': 0, 'SUVs & 7-Seaters': 0 };
         pricingState.vehicles.forEach(c => { catTotals[c.category] += (Number(carWeights[c.id]) || 0); });
-        const carShareInCat = catTotals[car.category] > 0 ? (Number(carWeights[car.id]) || 0) / catTotals[car.category] : 0;
+        const carShareInCat = catTotals[car.category] > 0 ? (Number(carWeights[c.id]) || 0) / catTotals[car.category] : 0;
         return catShare * carShareInCat;
      });
      
@@ -1202,9 +1199,9 @@ export default function ProjectionDashboard() {
             <div className="flex items-center justify-between mb-2">
                <span className="text-[10px] font-bold text-slate-400 uppercase">Scenario B Format</span>
                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200">
-                 <button onClick={() => setModelType(3)} className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all ${modelType === 3 ? 'bg-white text-[#f04343] shadow-sm border border-slate-200' : 'text-slate-500 hover:bg-slate-200'}`}>3 Pkg</button>
-                 <button onClick={() => setModelType(4)} className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all ${modelType === 4 ? 'bg-white text-[#f04343] shadow-sm border border-slate-200' : 'text-slate-500 hover:bg-slate-200'}`}>4 Pkg</button>
-                 <button onClick={() => setModelType(5)} className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all ${modelType === 5 ? 'bg-white text-[#f04343] shadow-sm border border-slate-200' : 'text-slate-500 hover:bg-slate-200'}`}>5 Pkg</button>
+                 <button onClick={() => pricingDispatch({type: 'SET_MODEL_TYPE', value: 3})} className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all ${modelType === 3 ? 'bg-white text-[#f04343] shadow-sm border border-slate-200' : 'text-slate-500 hover:bg-slate-200'}`}>3 Pkg</button>
+                 <button onClick={() => pricingDispatch({type: 'SET_MODEL_TYPE', value: 4})} className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all ${modelType === 4 ? 'bg-white text-[#f04343] shadow-sm border border-slate-200' : 'text-slate-500 hover:bg-slate-200'}`}>4 Pkg</button>
+                 <button onClick={() => pricingDispatch({type: 'SET_MODEL_TYPE', value: 5})} className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all ${modelType === 5 ? 'bg-white text-[#f04343] shadow-sm border border-slate-200' : 'text-slate-500 hover:bg-slate-200'}`}>5 Pkg</button>
                </div>
             </div>
 
@@ -1216,11 +1213,11 @@ export default function ProjectionDashboard() {
               {activeCustomPkgs.map((pkg, i) => (
                 <div key={pkg.id} className="flex items-center gap-3">
                   <div className="relative flex-[2]">
-                    <input type="number" value={pkg.km} onChange={e => setCustomPkgs(p => p.map((x, idx) => idx === i ? {...x, km: e.target.value} : x))} className="w-full border border-slate-200 rounded px-3 py-1.5 font-bold text-slate-800 focus:border-[#f04343] outline-none" />
+                    <input type="number" value={pkg.km} onChange={e => pricingDispatch({type: 'UPDATE_PACKAGE_KM', id: pkg.id, value: e.target.value})} className="w-full border border-slate-200 rounded px-3 py-1.5 font-bold text-slate-800 focus:border-[#f04343] outline-none" />
                     <span className="absolute right-3 top-2 text-xs text-slate-400">km</span>
                   </div>
                   <div className="relative flex-1">
-                    <input type="number" value={pkg.share} onChange={e => setCustomPkgs(p => p.map((x, idx) => idx === i ? {...x, share: e.target.value} : x))} className="w-full border border-slate-200 rounded px-2 py-1.5 font-bold text-slate-600 text-right pr-5 focus:border-[#f04343] outline-none" />
+                    <input type="number" value={pkg.share} onChange={e => pricingDispatch({type: 'UPDATE_PACKAGE_SHARE', id: pkg.id, value: e.target.value})} className="w-full border border-slate-200 rounded px-2 py-1.5 font-bold text-slate-600 text-right pr-5 focus:border-[#f04343] outline-none" />
                     <span className="absolute right-2 top-2 text-xs text-slate-400">%</span>
                   </div>
                 </div>
@@ -1413,152 +1410,6 @@ export default function ProjectionDashboard() {
           </div>
 
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mb-10">
-            <div className="p-4 border-b border-slate-100 bg-slate-50 flex items-center gap-2">
-               <Gauge className="text-[#f04343]" size={18}/>
-               <h2 className="text-base font-bold text-slate-800">Operational Economics (Custom Strategy)</h2>
-            </div>
-            
-            <div className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-0">
-                 <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                    <p className="text-[10px] uppercase font-bold text-slate-500 mb-1">Average KM Offered</p>
-                    <div className="flex items-end gap-3">
-                       <span className="text-2xl font-bold text-slate-800">{formatKM(engineResults.kmImpact.customAvgKm)}<span className="text-sm text-slate-500 font-normal"> km</span></span>
-                       <span className="text-xs text-slate-400 line-through mb-1">{formatKM(engineResults.kmImpact.existAvgKm)} km</span>
-                    </div>
-                 </div>
-                 
-                 <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                    <p className="text-[10px] uppercase font-bold text-slate-500 mb-1">Total Fleet KM (Monthly)</p>
-                    <div className="flex items-end gap-3">
-                       <span className="text-2xl font-bold text-slate-800">{formatKM(engineResults.kmImpact.customTotalMonthlyKm)}</span>
-                    </div>
-                    <p className={`text-xs font-bold mt-2 flex items-center gap-1 ${engineResults.kmImpact.monthlyKmDiff > 0 ? 'text-emerald-600' : 'text-[#f04343]'}`}>
-                       {engineResults.kmImpact.monthlyKmDiff > 0 ? '+' : ''}{formatKM(engineResults.kmImpact.monthlyKmDiff)} total fleet km driven
-                    </p>
-                 </div>
-
-                 <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                    <p className="text-[10px] uppercase font-bold text-slate-500 mb-1">Business Impact Summary</p>
-                    <div className="flex flex-col justify-center h-full gap-2 -mt-1">
-                       <div className="flex justify-between items-center text-sm font-bold">
-                          <span className="text-slate-600">Total Cash Flow:</span>
-                          <span className={revDiff > 0 ? 'text-emerald-600' : 'text-[#f04343]'}>
-                            {revDiff > 0 ? '▲ UP' : '▼ DOWN'}
-                          </span>
-                       </div>
-                    </div>
-                 </div>
-              </div>
-              
-              <h3 className="font-bold text-slate-600 text-sm mb-3 mt-8">Per-Package Kilometer Adjustments</h3>
-              <div className="border border-slate-100 rounded-xl overflow-hidden overflow-x-auto">
-                <table className="w-full text-left text-sm whitespace-nowrap">
-                  <thead className="bg-slate-50 text-slate-500 text-[10px] uppercase">
-                    <tr>
-                      <th className="p-3">Scenario A (Fixed Slabs)</th>
-                      <th className="p-3 bg-[#f04343]/5 text-[#f04343]">Scenario B (Custom)</th>
-                      <th className="p-3">Difference</th>
-                      <th className="p-3">% Change</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {engineResults.kmImpact.kmPackageDiffs.map((row, i) => (
-                      <tr key={`kmt-${i}`}>
-                        <td className="p-3 font-semibold text-slate-600">
-                          {i < 4 ? <>{row.eKm} km <span className="text-[10px] font-normal text-slate-400">({row.eSharePct.toFixed(1)}% Demand)</span></> : <span className="text-slate-300">N/A</span>}
-                        </td>
-                        <td className="p-3 font-bold text-[#f04343] bg-[#f04343]/5">
-                          {i < modelType ? (
-                            <>{row.cKm} km <span className="text-[10px] font-normal text-[#f04343]/70">({row.cSharePct.toFixed(1)}% Demand)</span></>
-                          ) : <span className="text-slate-300">-</span>}
-                        </td>
-                        <td className={`p-3 font-bold ${row.diffKm > 0 ? 'text-emerald-600' : row.diffKm < 0 ? 'text-[#f04343]' : 'text-slate-400'}`}>
-                           {i < modelType && i < 4 ? (row.diffKm > 0 ? `+${row.diffKm} km` : `${row.diffKm} km`) : '-'}
-                        </td>
-                        <td className={`p-3 font-bold ${row.diffPct > 0 ? 'text-emerald-600' : row.diffPct < 0 ? 'text-[#f04343]' : 'text-slate-400'}`}>
-                           {i < modelType && i < 4 ? (row.diffPct > 0 ? `+${row.diffPct.toFixed(1)}%` : `${row.diffPct.toFixed(1)}%`) : '-'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-10">
-            <h2 className="text-lg font-bold text-slate-800 border-b border-slate-100 pb-4 mb-4">Revenue Breakdown Comparison</h2>
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-              
-              <div className="flex flex-col gap-3">
-                <h3 className="font-bold text-slate-600 text-sm flex items-center gap-2"><Map size={16}/> Gross Base Revenue by KM Pkg</h3>
-                <div className="border border-slate-100 rounded-xl overflow-hidden">
-                  <table className="w-full text-left text-sm">
-                    <thead className="bg-slate-50 text-slate-500 text-[10px] uppercase">
-                      <tr><th className="p-2 text-center border-r">Existing</th><th className="p-2 text-center bg-[#f04343]/5 text-[#f04343]">Custom</th></tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {Array.from({ length: Math.max(4, modelType) }).map((_, i) => (
-                        <tr key={i}>
-                          <td className="p-2 border-r flex justify-between">
-                            <span className="text-slate-500">{i < 4 ? pricingState.constants.slabKms[i] + 'km' : 'N/A'}</span>
-                            <span className="font-semibold">{i < 4 ? formatINR(engineResults.breakdown.byPkgExist[i]) : '-'}</span>
-                          </td>
-                          <td className="p-2 flex justify-between bg-[#f04343]/5">
-                            {i < modelType ? (
-                               <>
-                                 <span className="text-[#f04343]/70 font-semibold">{engineResults.safeCustomPkgsOutput[i].km}km</span>
-                                 <span className="font-bold text-[#f04343]">{formatINR(engineResults.breakdown.byPkgCust[i])}</span>
-                               </>
-                            ) : (
-                               <span className="text-slate-400 italic text-center w-full">Not Used</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-3">
-                <h3 className="font-bold text-slate-600 text-sm flex items-center gap-2"><Car size={16}/> Gross Base Revenue by Category</h3>
-                <div className="border border-slate-100 rounded-xl overflow-hidden">
-                  <table className="w-full text-left text-sm">
-                    <thead className="bg-slate-50 text-slate-500 text-[10px] uppercase">
-                      <tr><th className="p-2">Category</th><th className="p-2">Existing</th><th className="p-2">Custom</th></tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {Object.keys(catSplit).map(cat => {
-                        const existCat = engineResults.breakdown.byCatExist[cat] || 0;
-                        const custCat = engineResults.breakdown.byCatCust[cat] || 0;
-                        const diff = custCat - existCat;
-                        return (
-                          <tr key={`res-${cat}`}>
-                            <td className="p-2 font-semibold text-xs">{cat}</td>
-                            <td className="p-2">{formatINR(existCat)}</td>
-                            <td className="p-2 font-bold text-[#f04343] relative pr-6">
-                               {formatINR(custCat)}
-                               {diff !== 0 && (
-                                 <span className={`absolute right-1 top-2.5 text-[9px] ${diff > 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                                   {diff > 0 ? '▲' : '▼'}
-                                 </span>
-                               )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-            </div>
-          </div>
-
-          {/* --- MANUAL BREAKDOWN & RANDOM GENERATOR --- */}
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mb-10">
             <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
                 <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
@@ -1578,7 +1429,7 @@ export default function ProjectionDashboard() {
                     <div className="flex-1 min-w-[200px]">
                       <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Select Vehicle</label>
                       <select value={bdCarId} onChange={e => setBdCarId(Number(e.target.value))} className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-bold text-slate-800 outline-none focus:border-[#f04343]">
-                         {CARS_DB.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                         {pricingState.vehicles.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                       </select>
                     </div>
                     <div className="flex-1 min-w-[120px]">
