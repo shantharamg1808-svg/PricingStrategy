@@ -1,14 +1,32 @@
 # Pricing Platform Engine
 
-A dynamic pricing strategy calculator for vehicles built with React.
+A comprehensive pricing strategy platform with dynamic pricing calculator and trip package analyzer built with React.
 
 ## Overview
 
-This application calculates dynamic pricing for different vehicle models based on distance and regression analysis. It allows users to:
-- Select different car models
-- Input trip distances
-- View calculated prices with comparisons to original pricing
-- Manually override base prices and per-km rates
+This application provides two powerful tools for pricing strategy analysis:
+
+### 🧮 **Pricing Calculator**
+- **Dynamic Pricing**: Calculates rates based on distance and regression analysis
+- **50+ Car Models**: Extensive database of vehicle configurations
+- **Price Comparison**: Shows dynamic pricing vs. original fixed pricing
+- **Manual Overrides**: Adjust base prices and rates as needed
+- **Summary Table**: Compare all trip options
+
+### 📊 **Trip Package Analyzer**
+- **Package Configuration**: Define km/day limits for 3 or 4 range models
+- **30+ Locations**: Pre-loaded with popular tourist destinations
+- **Profitability Analysis**: Automatically analyzes which locations are profitable
+- **Company vs Customer Advantage**: Visual indicators for pricing strategy
+- **Editable Parameters**: Modify distances, days, and package assignments
+
+## Features
+
+- **Dual Tools**: Switch between pricing calculator and package analyzer
+- **Interactive Tables**: Edit distances, days, and pricing parameters
+- **Visual Indicators**: Color-coded profitability analysis
+- **Responsive Design**: Works on desktop and mobile devices
+- **Real-time Calculations**: Instant updates as you modify parameters
 
 ## How to Deploy to Netlify
 
@@ -42,8 +60,7 @@ This application calculates dynamic pricing for different vehicle models based o
 1. Open terminal in this folder
 2. Run:
    ```bash
-   npm install -g netlify-cli
-   netlify deploy --prod --dir=dist
+   npx netlify-cli deploy --prod --dir=dist
    ```
 3. Follow the prompts
 
@@ -75,13 +92,10 @@ npm run build
 
 This creates a `dist` folder with everything needed to deploy.
 
-## Features
+## Navigation
 
-- **Multiple Car Models**: 50+ vehicle configurations
-- **Dynamic Pricing Calculator**: Calculates rates based on distance
-- **Price Comparison**: Shows dynamic vs. original pricing
-- **Editable Overrides**: Manually adjust prices if needed
-- **Summary Table**: Compare all trip options
+- **Calculator Tab**: Dynamic pricing calculator for individual trips
+- **Trip Package Analyzer Tab**: Analyze profitability across multiple locations
 
 ## Created With
 
@@ -91,6 +105,8 @@ This creates a `dist` folder with everything needed to deploy.
 - Lucide React Icons
 
 ---
+
+**Live Demo**: [https://pricingstrategywz.netlify.app](https://pricingstrategywz.netlify.app)
 
 **Need Help?**
 - Netlify Docs: https://docs.netlify.com

@@ -1,16 +1,23 @@
 import React, { useState, useMemo } from 'react';
-import { 
-  Car, 
-  Settings2, 
-  RotateCcw, 
-  Info, 
-  AlertCircle, 
-  TrendingUp, 
+import {
+  Car,
+  Settings2,
+  RotateCcw,
+  Info,
+  AlertCircle,
+  TrendingUp,
   TrendingDown,
   Calculator,
   LayoutDashboard,
-  Scale
+  Scale,
+  Download,
+  BarChart3
 } from 'lucide-react';
+import TripPackageAnalyzer from './TripPackageAnalyzer.jsx';
+import MultiVehicleDashboard from './MultiVehicleDashboard.jsx';
+import FinancialStrategySimulator from './FinancialStrategySimulator.jsx';
+import RevenueDashboard from './RevenueDashboard.jsx';
+import { GlobalPricingProvider, usePricingStore } from './GlobalPricingStore.jsx';
 
 // --- DATA PROCESSING ---
 const RAW_REGRESSION_DATA = [
@@ -193,19 +200,39 @@ function calculateTripData(data, car) {
   };
 }
 
-export default function App() {
-  const [selectedCarId, setSelectedCarId] = useState(0);
+function AppInner() {
+  const { state: pricingState, dispatch: pricingDispatch } = usePricingStore();
+  const [exportCsvFn, setExportCsvFn] = useState(null);
+
+  // Clear export handler when switching views (prevents stale handlers)
+  React.useEffect(() => {
+    setExportCsvFn(null);
+  }, [pricingState.activePage]);
+
+  const [selectedCarId, setSelectedCarId] = useState(() => {
+    const v = localStorage.getItem('selectedCarId');
+    return v !== null ? Number(v) : 0;
+  });
   const selectedCar = CARS_DB[selectedCarId];
 
-  const [inputs, setInputs] = useState([
-    { id: 'trip-1', km: 160, baseOverride: '', rateOverride: '' },
-    { id: 'trip-2', km: 350, baseOverride: '', rateOverride: '' },
-    { id: 'trip-3', km: 700, baseOverride: '', rateOverride: '' },
-  ]);
+  const modelType = pricingState.modelType;
 
+  // Added 4th trip option to the initial state
+  const [inputs, setInputs] = useState(() => {
+    const stored = localStorage.getItem('inputs');
+    if (stored) try { return JSON.parse(stored); } catch{};
+    return [
+      { id: 'trip-1', km: 160, baseOverride: '', rateOverride: '' },
+      { id: 'trip-2', km: 350, baseOverride: '', rateOverride: '' },
+      { id: 'trip-3', km: 500, baseOverride: '', rateOverride: '' },
+      { id: 'trip-4', km: 700, baseOverride: '', rateOverride: '' },
+    ];
+  });
+
+  // only calculate active trips according to modelType
   const tripsData = useMemo(() => {
-    return inputs.map(input => calculateTripData(input, selectedCar));
-  }, [inputs, selectedCar]);
+    return inputs.slice(0, modelType).map(input => calculateTripData(input, selectedCar));
+  }, [inputs, selectedCar, modelType]);
 
   const handleInputChange = (id, field, value) => {
     setInputs(prev => 
@@ -236,6 +263,44 @@ export default function App() {
     }).format(value);
   };
 
+  // sync state to localStorage
+  React.useEffect(() => {
+    const savedView = localStorage.getItem('activeView');
+    if (savedView) {
+      pricingDispatch({ type: 'SET_ACTIVE_PAGE', value: savedView });
+    }
+
+    const savedModelType = localStorage.getItem('modelType');
+    if (savedModelType) {
+      pricingDispatch({ type: 'SET_MODEL_TYPE', value: Number(savedModelType) });
+    }
+
+    const savedPackages = localStorage.getItem('analyzer_packages');
+    if (savedPackages) {
+      try {
+        pricingDispatch({ type: 'SET_PACKAGES', packages: JSON.parse(savedPackages) });
+      } catch (error) {
+        console.warn('Failed to load saved packages', error);
+      }
+    }
+  }, []);
+
+  React.useEffect(() => {
+    localStorage.setItem('activeView', pricingState.activePage);
+  }, [pricingState.activePage]);
+
+  React.useEffect(() => {
+    localStorage.setItem('selectedCarId', String(selectedCarId));
+  }, [selectedCarId]);
+
+  React.useEffect(() => {
+    localStorage.setItem('modelType', String(pricingState.modelType));
+  }, [pricingState.modelType]);
+
+  React.useEffect(() => {
+    localStorage.setItem('inputs', JSON.stringify(inputs));
+  }, [inputs]);
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans flex flex-col">
       
@@ -247,99 +312,166 @@ export default function App() {
           </div>
           <span className="font-bold text-white tracking-wide text-lg">Pricing Platform Engine</span>
         </div>
-        <div className="hidden md:flex gap-6 text-sm font-medium">
-          <button className="text-white border-b-2 border-white pb-1 flex items-center gap-2 transition-all">
+        <div className="hidden md:flex items-center gap-6 text-sm font-medium">
+          <button
+            onClick={() => pricingDispatch({ type: 'SET_ACTIVE_PAGE', value: 'calculator' })}
+            className={`text-white border-b-2 pb-1 flex items-center gap-2 transition-all ${pricingState.activePage === 'calculator' ? 'border-white' : 'border-transparent hover:border-white/50'}`}
+          >
             <LayoutDashboard size={16} /> Calculator
           </button>
+          <button
+            onClick={() => pricingDispatch({ type: 'SET_ACTIVE_PAGE', value: 'analyzer' })}
+            className={`text-white border-b-2 pb-1 flex items-center gap-2 transition-all ${pricingState.activePage === 'analyzer' ? 'border-white' : 'border-transparent hover:border-white/50'}`}
+          >
+            <Settings2 size={16} /> Trip Package Analyzer
+          </button>
+          <button
+            onClick={() => pricingDispatch({ type: 'SET_ACTIVE_PAGE', value: 'multivehicle' })}
+            className={`text-white border-b-2 pb-1 flex items-center gap-2 transition-all ${pricingState.activePage === 'multivehicle' ? 'border-white' : 'border-transparent hover:border-white/50'}`}
+          >
+            <Car size={16} /> Multi-Vehicle Pricing
+          </button>
+          <button
+            onClick={() => pricingDispatch({ type: 'SET_ACTIVE_PAGE', value: 'projection' })}
+            className={`text-white border-b-2 pb-1 flex items-center gap-2 transition-all ${pricingState.activePage === 'projection' ? 'border-white' : 'border-transparent hover:border-white/50'}`}
+          >
+            <BarChart3 size={16} /> Revenue Dashboard
+          </button>
+
+          {exportCsvFn && (
+            <button
+              onClick={() => exportCsvFn()}
+              className="ml-4 flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-bold text-[#f04343] shadow-sm transition-colors hover:bg-slate-100"
+            >
+              <Download size={16} /> Export CSV
+            </button>
+          )}
         </div>
       </nav>
 
       {/* MAIN CONTENT APP */}
-      <div className="flex-1 p-4 md:p-8 max-w-screen-2xl mx-auto w-full grid grid-cols-1 xl:grid-cols-4 gap-8">
-        
-        {/* SIDEBAR: CAR SELECTOR & SLAB INFO */}
-        <div className="xl:col-span-1 space-y-6">
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
-            
-            {/* Car Selector */}
-            <div className="mb-6">
-              <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
-                <Car size={16} className="text-[#f04343]"/> Selected Vehicle
-              </label>
-              <select
-                value={selectedCarId}
-                onChange={(e) => setSelectedCarId(Number(e.target.value))}
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-3 text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#f04343] focus:border-transparent transition-all"
-              >
-                {CARS_DB.map((car) => (
-                  <option key={car.id} value={car.id}>
-                    {car.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+      {pricingState.activePage === 'calculator' ? (
+        <div className="flex-1 p-4 md:p-8 max-w-screen-2xl mx-auto w-full grid grid-cols-1 xl:grid-cols-4 gap-8">
+          
+          {/* SIDEBAR: CAR SELECTOR & SLAB INFO */}
+          <div className="xl:col-span-1 space-y-6">
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+              
+              {/* Car Selector */}
+              <div className="mb-6">
+                <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
+                  <Car size={16} className="text-[#f04343]"/> Selected Vehicle
+                </label>
+                <select
+                  value={selectedCarId}
+                  onChange={(e) => setSelectedCarId(Number(e.target.value))}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-3 text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#f04343] focus:border-transparent transition-all"
+                >
+                  {CARS_DB.map((car) => (
+                    <option key={car.id} value={car.id}>
+                      {car.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            <div className="flex items-center gap-2 mb-4 text-slate-700 font-semibold border-t border-slate-100 pt-6">
-              <Settings2 size={20} className="text-[#f04343]"/>
-              <h2>Reference Slabs for {selectedCar.name.split(' ')[0]}</h2>
+              <div className="flex items-center gap-2 mb-4 text-slate-700 font-semibold border-t border-slate-100 pt-6">
+                <Settings2 size={20} className="text-[#f04343]"/>
+                <h2>Reference Slabs for {selectedCar.name.split(' ')[0]}</h2>
+              </div>
+              
+              <div className="space-y-4">
+                {selectedCar.slabs.map((slab, index) => (
+                  <div key={index} className="rounded-xl border border-slate-200 overflow-hidden shadow-sm hover:border-[#f04343]/30 transition-colors">
+                    <div className="flex justify-between items-center p-3 bg-white">
+                      <div>
+                        <span className="block font-bold text-slate-800">{slab.km} km</span>
+                        <span className="text-xs text-slate-500 font-medium">Slab {index + 1}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="block font-semibold text-slate-700">{formatINR(slab.basePrice)}</span>
+                        <span className="text-[11px] text-[#f04343] font-bold">₹{slab.rate.toFixed(4)}/km</span>
+                      </div>
+                    </div>
+                    <div className="bg-slate-50 px-3 py-2 text-[11px] text-slate-600 border-t border-slate-100 flex justify-between items-center">
+                      <span className="font-medium text-slate-500">Original Fixed Price:</span>
+                      <span className="font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200">
+                        {formatINR(slab.ogPrice)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              
+              <div className="mt-6 p-4 bg-[#f04343]/5 rounded-xl flex gap-3 text-xs text-slate-700 border border-[#f04343]/20">
+                <Info className="shrink-0 mt-0.5 text-[#f04343]" size={16} />
+                <p>
+                  Dynamic rates scale from mathematical base. The original fixed price is shown for context and comparison against the old pricing model.
+                </p>
+              </div>
             </div>
+          </div>
+
+          {/* MAIN CALCULATOR CARDS & SUMMARY */}
+          <div className="xl:col-span-3 flex flex-col gap-6">
             
-            <div className="space-y-4">
-              {selectedCar.slabs.map((slab, index) => (
-                <div key={index} className="rounded-xl border border-slate-200 overflow-hidden shadow-sm hover:border-[#f04343]/30 transition-colors">
-                  <div className="flex justify-between items-center p-3 bg-white">
-                    <div>
-                      <span className="block font-bold text-slate-800">{slab.km} km</span>
-                      <span className="text-xs text-slate-500 font-medium">Slab {index + 1}</span>
-                    </div>
-                    <div className="text-right">
-                      <span className="block font-semibold text-slate-700">{formatINR(slab.basePrice)}</span>
-                      <span className="text-[11px] text-[#f04343] font-bold">₹{slab.rate.toFixed(4)}/km</span>
-                    </div>
-                  </div>
-                  <div className="bg-slate-50 px-3 py-2 text-[11px] text-slate-600 border-t border-slate-100 flex justify-between items-center">
-                    <span className="font-medium text-slate-500">Original Fixed Price:</span>
-                    <span className="font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200">
-                      {formatINR(slab.ogPrice)}
-                    </span>
-                  </div>
-                </div>
+{/* Top Control Bar for Toggling Trip Models */}
+          <div className="flex items-center justify-between bg-white rounded-2xl p-4 shadow-sm border border-slate-200">
+            <h2 className="text-lg font-bold text-slate-800 ml-2">Trip Price Estimations</h2>
+            <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-lg">
+              <button 
+                onClick={() => setModelType(3)}
+                className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${modelType === 3 ? 'bg-white text-[#f04343] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                3 Trip Model
+              </button>
+              <button 
+                onClick={() => setModelType(4)}
+                className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${modelType === 4 ? 'bg-white text-[#f04343] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                4 Trip Model
+              </button>
+            </div>
+          </div>
+
+          {/* Dynamic Grid Layout for Cards based on modelType */}
+          <div className={`grid grid-cols-1 gap-6 ${modelType === 4 ? 'lg:grid-cols-2' : 'lg:grid-cols-3'}`}>
+              {tripsData.map((tripData, index) => (
+                <PricingCard 
+                  key={tripData.id} 
+                  data={tripData} 
+                  index={index} 
+                  car={selectedCar}
+                  onChange={handleInputChange}
+                  onReset={resetOverrides}
+                  formatINR={formatINR}
+                />
               ))}
             </div>
-            
-            <div className="mt-6 p-4 bg-[#f04343]/5 rounded-xl flex gap-3 text-xs text-slate-700 border border-[#f04343]/20">
-              <Info className="shrink-0 mt-0.5 text-[#f04343]" size={16} />
-              <p>
-                Dynamic rates scale from mathematical base. The original fixed price is shown for context and comparison against the old pricing model.
-              </p>
-            </div>
+
+            {/* Simple Trip Summary Panel */}
+            <TripSummary trips={tripsData} car={selectedCar} formatINR={formatINR} />
+
           </div>
         </div>
-
-        {/* MAIN CALCULATOR CARDS & SUMMARY */}
-        <div className="xl:col-span-3 flex flex-col gap-6">
-          
-          {/* 3 Input Cards */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {tripsData.map((tripData, index) => (
-              <PricingCard 
-                key={tripData.id} 
-                data={tripData} 
-                index={index} 
-                car={selectedCar}
-                onChange={handleInputChange}
-                onReset={resetOverrides}
-                formatINR={formatINR}
-              />
-            ))}
-          </div>
-
-          {/* Simple Trip Summary Panel */}
-          <TripSummary trips={tripsData} car={selectedCar} formatINR={formatINR} />
-
-        </div>
-      </div>
+      ) : pricingState.activePage === 'analyzer' ? (
+        <TripPackageAnalyzer setExportHandler={setExportCsvFn} />
+      ) : pricingState.activePage === 'multivehicle' ? (
+        <MultiVehicleDashboard setExportHandler={setExportCsvFn} />
+      ) : pricingState.activePage === 'projection' ? (
+        <RevenueDashboard />
+      ) : (
+        <FinancialStrategySimulator />
+      )}
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <GlobalPricingProvider>
+      <AppInner />
+    </GlobalPricingProvider>
   );
 }
 
