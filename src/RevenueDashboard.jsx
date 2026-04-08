@@ -477,7 +477,7 @@ export default function ProjectionDashboard() {
     let existAvgKm = 0, customAvgKm = 0;
 
     const breakdown = {
-      byPkgExist: [0, 0, 0, 0], byPkgCust: [0, 0, 0, 0, 0],
+      byPkgExist: [0, 0, 0, 0], byPkgCust: Array(Math.max(3, modelType)).fill(0),
       byCatExist: { 'Hatchbacks & Minis': 0, 'Compact SUVs': 0, 'SUVs & 7-Seaters': 0 },
       byCatCust: { 'Hatchbacks & Minis': 0, 'Compact SUVs': 0, 'SUVs & 7-Seaters': 0 }
     };
@@ -542,7 +542,11 @@ export default function ProjectionDashboard() {
 
              const wdPrice = refSlab.basePrice + (refSlab.rate * customKm);
              const wePrice = refSlab.weekendBase + (refSlab.weekendRate * customKm);
-             const basePrice = ((wdPrice * daysWd) + (wePrice * daysWe)) * modifier;
+             
+             const isSelected = pricingState.modifierSelection.includes(activeCustomPkgs[i]?.id);
+             const pkgModifier = isSelected ? modifier : 1;
+
+             const basePrice = ((wdPrice * daysWd) + (wePrice * daysWe)) * pkgModifier;
 
              const allowedKm = customKm * totalDays;
              const extraKms = Math.max(0, row.distance - allowedKm);
@@ -566,7 +570,7 @@ export default function ProjectionDashboard() {
           breakdown.byPkgCust[bestPkgIndex] += bestBasePrice;
           customAvgKm += Number(activeCustomPkgs[bestPkgIndex].km) * totalDays;
 
-          const rowCustomTaxable = (bestBasePrice - (bestBasePrice * row.discountPct)) + bestExtraCharge + row.extraHrRev + row.logistics;
+          const rowCustomTaxable = (bestBasePrice - (bestBasePrice * row.discountPct));
           customTax += rowCustomTaxable * (safeTaxRate / 100);
        });
 
@@ -638,7 +642,10 @@ export default function ProjectionDashboard() {
              const nodeWdDays = globalWdDays * totalNodeShare;
              const nodeWeDays = globalWeDays * totalNodeShare;
 
-             const custTotalNodeRev = ((nodeWdDays * custWdPrice) + (nodeWeDays * custWePrice)) * modifier;
+             const isSelected = pricingState.modifierSelection.includes(activeCustomPkgs[i]?.id);
+             const pkgModifier = isSelected ? modifier : 1;
+
+             const custTotalNodeRev = ((nodeWdDays * custWdPrice) + (nodeWeDays * custWePrice)) * pkgModifier;
 
              customBaseRev += custTotalNodeRev;
              breakdown.byPkgCust[i] += custTotalNodeRev;
@@ -650,8 +657,8 @@ export default function ProjectionDashboard() {
        existingDiscount = existingBaseRev * effectiveGlobalDiscountMultiplier * (totalDiscountShare / 100);
        customDiscount = customBaseRev * effectiveGlobalDiscountMultiplier * (totalDiscountShare / 100);
        
-       const existingTaxable = (existingBaseRev - existingDiscount) + existingExtraRev + existingExtraHrRev + logisticRev;
-       const customTaxable = (customBaseRev - customDiscount) + customExtraRev + customExtraHrRev + logisticRev;
+       const existingTaxable = (existingBaseRev - existingDiscount);
+       const customTaxable = (customBaseRev - customDiscount);
 
        existingTax = existingTaxable * (safeTaxRate / 100);
        customTax = customTaxable * (safeTaxRate / 100);
@@ -732,7 +739,7 @@ export default function ProjectionDashboard() {
     }
 
     const safeCustomPkgsOutput = [];
-    for (let i = 0; i < 5; i++) { safeCustomPkgsOutput.push(activeCustomPkgs[i] || { km: 0 }); }
+    for (let i = 0; i < modelType; i++) { safeCustomPkgsOutput.push(activeCustomPkgs[i] || { km: 0 }); }
 
     return { 
       existing: { baseRev: existingBaseRev, discount: existingDiscount, discountedBase: existingDiscountedBase, extraRev: existingExtraRev, extraHrRev: existingExtraHrRev, logisticRev: logisticRev, tax: existingTax, totalCashFlow: existingTotalCashFlow },
@@ -817,13 +824,15 @@ export default function ProjectionDashboard() {
      const wdMult = wdHours / 24;
      const weMult = weHours / 24;
 
-     const modifier = 1 + (pricingState.globalModifier / 100);
-     const grossBase = ((wdPrice * wdMult) + (wePrice * weMult)) * modifier;
+     const activePkgId = activeCustomPkgs.find(p => Number(p.km) === selectedKm)?.id || 'p1';
+     const isSelected = pricingState.modifierSelection.includes(activePkgId);
+     const pkgModifier = isSelected ? (1 + (pricingState.globalModifier / 100)) : 1;
+     const grossBase = ((wdPrice * wdMult) + (wePrice * weMult)) * pkgModifier;
      const discAmt = grossBase * (selectedDisc / 100);
      const discBase = grossBase - discAmt;
-     const taxable = discBase + extraCharge + extraHrCharge + logisticFee;
+     const taxable = discBase;
      const taxAmt = taxable * (Number(taxRate) / 100);
-     const totalCollected = taxable + taxAmt + car.deposit;
+     const totalCollected = discBase + extraCharge + extraHrCharge + logisticFee + taxAmt + car.deposit;
 
      setRandomReceipt({
        car: car.name, category: car.category, targetKm: selectedKm,
@@ -857,8 +866,10 @@ export default function ProjectionDashboard() {
   const bdWdPrice = refSlab.basePrice + (refSlab.rate * bdTargetKm);
   const bdWePrice = refSlab.weekendBase + (refSlab.weekendRate * bdTargetKm);
   
-  const modifier = 1 + (pricingState.globalModifier / 100);
-  const bdGrossBase = ((bdWdPrice * bdWdMult) + (bdWePrice * bdWeMult)) * modifier;
+  const bdActivePkgId = activeCustomPkgs.find(p => Number(p.km) === bdTargetKm)?.id || 'p1';
+  const bdIsSelected = pricingState.modifierSelection.includes(bdActivePkgId);
+  const bdPkgModifier = bdIsSelected ? (1 + (pricingState.globalModifier / 100)) : 1;
+  const bdGrossBase = ((bdWdPrice * bdWdMult) + (bdWePrice * bdWeMult)) * bdPkgModifier;
   const bdDiscountAmt = bdGrossBase * (Number(bdDiscount) / 100);
   const bdDiscountedBase = bdGrossBase - bdDiscountAmt;
   
@@ -866,9 +877,9 @@ export default function ProjectionDashboard() {
   const bdExtraHrAmt = bdHasExtraHr ? 500 : 0;
   const bdLogisticAmt = (bdHasDelivery ? avgDeliveryFee : 0) + (bdHasPickup ? avgDeliveryFee : 0);
   
-  const bdTaxable = bdDiscountedBase + bdExtraKmAmt + bdExtraHrAmt + bdLogisticAmt;
+  const bdTaxable = bdDiscountedBase;
   const bdTaxAmt = bdTaxable * (Number(taxRate) / 100);
-  const bdFinalCashFlow = bdTaxable + bdTaxAmt + bdCar.deposit;
+  const bdFinalCashFlow = bdDiscountedBase + bdExtraKmAmt + bdExtraHrAmt + bdLogisticAmt + bdTaxAmt + bdCar.deposit;
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans flex flex-col relative">
@@ -1066,7 +1077,7 @@ export default function ProjectionDashboard() {
                   <span className="absolute right-2 top-1 text-xs text-slate-400">%</span>
                 </div>
               </div>
-              <p className="text-[9px] text-slate-400 -mt-2">Tax calculated strictly on (Discounted Base + Extras + Logistics)</p>
+              <p className="text-[9px] text-slate-400 -mt-2">Tax calculated strictly on Discounted Base</p>
 
               {/* Exact Historical Extra Settings */}
               <div className="pt-3 border-t border-slate-100">
@@ -1426,7 +1437,7 @@ export default function ProjectionDashboard() {
                    <Receipt className="text-[#f04343]" size={24}/> Per-Booking Economics (Step-by-Step Breakdown)
                 </h2>
                 <p className="text-sm text-slate-500 mt-1">
-                  Validate exactly how a single booking's cash flow is derived. Tax is correctly applied to (Discounted Base + Extras + Logistics).
+                  Validate exactly how a single booking's cash flow is derived. Tax is correctly applied to the Discounted Base.
                 </p>
               </div>
             </div>
@@ -1550,7 +1561,7 @@ export default function ProjectionDashboard() {
                           <span className="font-bold text-slate-800">+{formatINR(bdLogisticAmt)}</span>
                        </div>
                        <div className="flex justify-between items-center border-b border-slate-200 pb-2 bg-white p-2 rounded shadow-sm">
-                          <span className="font-bold text-slate-700">Total Taxable Amount</span>
+                          <span className="font-bold text-slate-700">Total Taxable Amount (Discount Base)</span>
                           <span className="font-bold text-slate-800">{formatINR(bdTaxable)}</span>
                        </div>
                        <div className="flex justify-between items-center border-b border-slate-200 pb-2">

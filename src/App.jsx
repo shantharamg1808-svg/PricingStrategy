@@ -101,6 +101,8 @@ function AppInner() {
     return {
       id: pkg.id,
       km: pkg.km,
+      baseOverride: rowOverrides.wdBase !== undefined ? rowOverrides.wdBase : '',
+      rateOverride: rowOverrides.wdRate !== undefined ? rowOverrides.wdRate : '',
       results: {
         closestSlab,
         difference,
@@ -271,7 +273,7 @@ function AppInner() {
                     <div className="bg-slate-50 px-3 py-2 text-[11px] text-slate-600 border-t border-slate-100 flex justify-between items-center">
                       <span className="font-medium text-slate-500">Original Fixed Price:</span>
                       <span className="font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200">
-                        {formatINR(slab.ogPrice)}
+                        {formatINR(slab.ogWd)}
                       </span>
                     </div>
                   </div>
