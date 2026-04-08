@@ -39,6 +39,26 @@ import {
   Lightbulb
 } from 'lucide-react';
 
+// --- UTILITY FUNCTIONS ---
+const formatINR = (val) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(val || 0);
+const formatKM = (val) => new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(val || 0);
+
+function getWeightedRandom(options, weights) {
+    const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+    if (totalWeight === 0) return options[Math.floor(Math.random() * options.length)];
+    
+    const randomVal = Math.random() * totalWeight;
+    let weightSum = 0;
+
+    for (let i = 0; i < options.length; i++) {
+        weightSum += weights[i];
+        if (randomVal <= weightSum) {
+            return options[i];
+        }
+    }
+    return options[options.length - 1]; 
+}
+
 // --- LIGHTWEIGHT CSV PARSER ---
 function parseCSV(text) {
   const rows = [];
@@ -95,9 +115,14 @@ const LOCATIONS = [
       { name: 'Record', distance: 500, days: 4}
 ];
 
+const COMMON_DURATIONS = [
+    { days: 1, count: 25 }, { days: 2, count: 35 }, { days: 3, count: 20 }, 
+    { days: 4, count: 10 }, { days: 5, count: 5 }, { days: 7, count: 5 }
+];
+
 // --- OPTIMIZER ENGINE ---
 function simulateScenarioEngine(testKms, testShares, context, pricingState) {
-  const { normCat, normCar, totalBookings, deliveryPct, pickupPct, avgDeliveryFee, totalDepositFloat, avgDiscountPct, taxRatePct, modelType, globalWdDays, globalWeDays, scaledExtraKmRev, scaledExtraHrRev } = context;
+  const { normCat, normCar, totalBookings, deliveryPct, pickupPct, avgDeliveryFee, totalDepositFloat, avgDiscountPct, taxRatePct, modelType, globalWdDays, globalWeDays, scaledExtraKmRev, scaledExtraHrRev, modifier } = context;
   
   let customBaseRev = 0;
 
@@ -123,7 +148,7 @@ function simulateScenarioEngine(testKms, testShares, context, pricingState) {
         const custWdPrice = refSlab.basePrice + (refSlab.rate * customKm);
         const custWePrice = refSlab.weekendBase + (refSlab.weekendRate * customKm);
 
-        customBaseRev += ((globalWdDays * totalNodeShare) * custWdPrice) + ((globalWeDays * totalNodeShare) * custWePrice);
+        customBaseRev += (((globalWdDays * totalNodeShare) * custWdPrice) + ((globalWeDays * totalNodeShare) * custWePrice)) * modifier;
       }
     }
   }
@@ -145,9 +170,9 @@ function simulateScenarioEngine(testKms, testShares, context, pricingState) {
 
 // --- MAIN DASHBOARD APP ---
 export default function ProjectionDashboard() {
-  const { state: pricingState, dispatch: pricingDispatch } = usePricingStore();
-  
-  const [modelType, setModelType] = useState(pricingState.modelType); 
+  const { state: pricingState, dispatch: pricingDispatch, immediateDispatch } = usePricingStore();
+  const { modelType, packages } = pricingState;
+
   const [dataSourceMode, setDataSourceMode] = useState('historical'); // 'historical' | 'csv'
   const [parsedCsvData, setParsedCsvData] = useState([]);
   const [csvStats, setCsvStats] = useState(null);
@@ -155,7 +180,6 @@ export default function ProjectionDashboard() {
   const [totalBookings, setTotalBookings] = useState('1360');
   const [catSplit, setCatSplit] = useState({ 'Hatchbacks & Minis': '54', 'Compact SUVs': '34', 'SUVs & 7-Seaters': '12' });
   const [extraKmPct, setExtraKmPct] = useState('18'); 
-  const [totalDiscountPct, setTotalDiscountPct] = useState('70'); 
   
   const [deliveryPct, setDeliveryPct] = useState('30'); 
   const [pickupPct, setPickupPct] = useState('30'); 
@@ -166,14 +190,13 @@ export default function ProjectionDashboard() {
   const [discountTiers, setDiscountTiers] = useState({ t1: { discount: '10', share: '30' }, t2: { discount: '15', share: '36' }, t3: { discount: '20', share: '4' } });
   const [taxRate, setTaxRate] = useState('18');
 
-  // Customizable Extra Revenue Base States
   const [baseExtraKmRev, setBaseExtraKmRev] = useState(pricingState.historicalData.extraKmRev);
   const [baseExtraHrRev, setBaseExtraHrRev] = useState(pricingState.historicalData.extraHrRev);
 
   const [separateExistDemand, setSeparateExistDemand] = useState(true);
   const [existPkgsShare, setExistPkgsShare] = useState(['32', '46', '16', '6']);
 
-  const activeCustomPkgs = pricingState.packages.slice(0, modelType);
+  const activeCustomPkgs = useMemo(() => packages.slice(0, modelType), [packages, modelType]);
 
   const [showCarWeights, setShowCarWeights] = useState(false);
   const [carWeights, setCarWeights] = useState(() => {
@@ -184,7 +207,6 @@ export default function ProjectionDashboard() {
 
   const handleCarWeightChange = (id, val) => { setCarWeights(prev => ({ ...prev, [id]: val })); };
 
-  // --- CSV UPLOAD HANDLER ---
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -212,7 +234,6 @@ export default function ProjectionDashboard() {
           const extraKms = parseFloat(row['Extra KMs']) || 0;
           const pkgName = row['Package Name'] || row['Overall Free KM'];
 
-          // Anomaly Filter
           if (dist > 10000 || dist <= 0) {
              anomalies++;
              const parsedPkgKm = parseFloat(pkgName) || 0;
@@ -266,12 +287,17 @@ export default function ProjectionDashboard() {
     return (250 * (norm['250'] || 0)) + (300 * (norm['300'] || 0)) + (500 * (norm['500'] || 0)) + (750 * (norm['750'] || 0)) + (1000 * (norm['1000'] || 0));
   }, [deliveryDist]);
 
-  const avgDiscountPct = useMemo(() => {
-    const t1 = Number(discountTiers.t1.discount) * Number(discountTiers.t1.share);
-    const t2 = Number(discountTiers.t2.discount) * Number(discountTiers.t2.share);
-    const t3 = Number(discountTiers.t3.discount) * Number(discountTiers.t3.share);
-    return (t1 + t2 + t3) / 10000;
+  const totalDiscountShare = useMemo(() => {
+    return (Number(discountTiers.t1.share) || 0) + (Number(discountTiers.t2.share) || 0) + (Number(discountTiers.t3.share) || 0);
   }, [discountTiers]);
+
+  const avgDiscountPct = useMemo(() => {
+    if(totalDiscountShare === 0) return 0;
+    const t1 = (Number(discountTiers.t1.discount) || 0) * (Number(discountTiers.t1.share) || 0);
+    const t2 = (Number(discountTiers.t2.discount) || 0) * (Number(discountTiers.t2.share) || 0);
+    const t3 = (Number(discountTiers.t3.discount) || 0) * (Number(discountTiers.t3.share) || 0);
+    return (t1 + t2 + t3) / (totalDiscountShare * 100);
+  }, [discountTiers, totalDiscountShare]);
 
   const [bdCarId, setBdCarId] = useState(pricingState.vehicles[0].id);
   const [bdKm, setBdKm] = useState('320');
@@ -286,7 +312,7 @@ export default function ProjectionDashboard() {
   const [randomReceipt, setRandomReceipt] = useState(null);
 
   useEffect(() => {
-    if (!activeCustomPkgs.find(p => p.km.toString() === bdKm.toString())) {
+    if (activeCustomPkgs.length > 0 && !activeCustomPkgs.find(p => p.km.toString() === bdKm.toString())) {
       setBdKm(activeCustomPkgs[1] ? activeCustomPkgs[1].km : activeCustomPkgs[0].km);
     }
   }, [activeCustomPkgs, bdKm]);
@@ -306,7 +332,6 @@ export default function ProjectionDashboard() {
     setOptProgress(0);
     optRef.current = true;
 
-    // Use CSV distributions if active, otherwise manual
     let activeTotalBookings = Number(totalBookings) || 0;
     let activeWdDays = (pricingState.historicalData.wdHours / 24) * (activeTotalBookings / pricingState.historicalData.bookings);
     let activeWeDays = (pricingState.historicalData.weHours / 24) * (activeTotalBookings / pricingState.historicalData.bookings);
@@ -350,9 +375,10 @@ export default function ProjectionDashboard() {
       pickupPct: Number(pickupPct) || 0,
       avgDeliveryFee,
       totalDepositFloat: totalDepositFloatContext,
-      avgDiscountPct,
+      avgDiscountPct: avgDiscountPct, 
       taxRatePct: Number(taxRate) || 0,
-      modelType
+      modelType,
+      modifier: 1 + (pricingState.globalModifier / 100)
     };
 
     const TOTAL_ITERATIONS = 25000;
@@ -428,8 +454,8 @@ export default function ProjectionDashboard() {
          return val.toFixed(1);
       });
 
-      pricingDispatch({ type: 'SET_PACKAGES', packages: prev.map((p, i) => {
-        if (i < modelType) return { ...p, km: String(optBest.pkgs[i]), share: formattedShares[i] };
+      immediateDispatch({ type: 'SET_PACKAGES', packages: packages.map((p, i) => {
+        if (i < modelType) return { ...p, km: String(Math.round(optBest.pkgs[i])), share: formattedShares[i] };
         return p;
       })});
       setOptBest(null);
@@ -479,6 +505,8 @@ export default function ProjectionDashboard() {
     });
 
     const sortedCustomPkgs = [...activeCustomPkgs].map((p, originalIndex) => ({...p, km: Number(p.km)||0, originalIndex})).sort((a,b) => a.km - b.km);
+    
+    const modifier = 1 + (pricingState.globalModifier / 100);
 
     if (isCsvMode) {
        // --- PURE ROW-BY-ROW CSV SIMULATION ---
@@ -519,7 +547,7 @@ export default function ProjectionDashboard() {
 
              const wdPrice = refSlab.basePrice + (refSlab.rate * customKm);
              const wePrice = refSlab.weekendBase + (refSlab.weekendRate * customKm);
-             const basePrice = (wdPrice * daysWd) + (wePrice * daysWe);
+             const basePrice = ((wdPrice * daysWd) + (wePrice * daysWe)) * modifier;
 
              const allowedKm = customKm * totalDays;
              const extraKms = Math.max(0, row.distance - allowedKm);
@@ -567,14 +595,7 @@ export default function ProjectionDashboard() {
        existingExtraHrRev = pricingState.historicalData.extraHrRev * scaleFactor;
        customExtraHrRev = existingExtraHrRev; 
 
-       const tierNorm = normalizePercentages({ t1: discountTiers.t1.share, t2: discountTiers.t2.share, t3: discountTiers.t3.share });
-       const totalDiscountedBookings = safeTotalBookingsFinal * (Number(discountTiers.t1.share) + Number(discountTiers.t2.share) + Number(discountTiers.t3.share)) / 100;
-       
-       const effectiveGlobalDiscountMultiplier = safeTotalBookingsFinal > 0 
-           ? ((totalDiscountedBookings * tierNorm.t1 * Number(discountTiers.t1.discount)) + 
-              (totalDiscountedBookings * tierNorm.t2 * Number(discountTiers.t2.discount)) + 
-              (totalDiscountedBookings * tierNorm.t3 * Number(discountTiers.t3.discount))) / (safeTotalBookingsFinal * 100) 
-           : 0;
+       const effectiveGlobalDiscountMultiplier = avgDiscountPct;
 
        logisticRev = (safeTotalBookingsFinal * (Number(deliveryPct) / 100) * avgDeliveryFee) + (safeTotalBookingsFinal * (Number(pickupPct) / 100) * avgDeliveryFee);
 
@@ -622,7 +643,7 @@ export default function ProjectionDashboard() {
              const nodeWdDays = globalWdDays * totalNodeShare;
              const nodeWeDays = globalWeDays * totalNodeShare;
 
-             const custTotalNodeRev = (nodeWdDays * custWdPrice) + (nodeWeDays * custWePrice);
+             const custTotalNodeRev = ((nodeWdDays * custWdPrice) + (nodeWeDays * custWePrice)) * modifier;
 
              customBaseRev += custTotalNodeRev;
              breakdown.byPkgCust[i] += custTotalNodeRev;
@@ -631,8 +652,8 @@ export default function ProjectionDashboard() {
          }
        }
 
-       existingDiscount = existingBaseRev * effectiveGlobalDiscountMultiplier;
-       customDiscount = customBaseRev * effectiveGlobalDiscountMultiplier;
+       existingDiscount = existingBaseRev * effectiveGlobalDiscountMultiplier * (totalDiscountShare / 100);
+       customDiscount = customBaseRev * effectiveGlobalDiscountMultiplier * (totalDiscountShare / 100);
        
        const existingTaxable = (existingBaseRev - existingDiscount) + existingExtraRev + existingExtraHrRev + logisticRev;
        const customTaxable = (customBaseRev - customDiscount) + customExtraRev + customExtraHrRev + logisticRev;
@@ -686,7 +707,7 @@ export default function ProjectionDashboard() {
       return {
         name: loc.name, distance: loc.distance, actualKm,
         existAssignedKm, existAllowed, existExtraKm, existExtraCharge: existExtraKm * globalAvgExtraRate,
-        custAssignedKm: custAssigned.km, custAllowed, custExtraKm, custExtraCharge: custExtraKm * globalAvgExtraRate
+        custAssignedKm: custAssigned.km, custAllowed, custExtraKm, custExtraCharge: custExtraKm * globalAvgExtraRate * modifier
       };
     });
 
@@ -721,16 +742,19 @@ export default function ProjectionDashboard() {
     return { 
       existing: { baseRev: existingBaseRev, discount: existingDiscount, discountedBase: existingDiscountedBase, extraRev: existingExtraRev, extraHrRev: existingExtraHrRev, logisticRev: logisticRev, tax: existingTax, totalCashFlow: existingTotalCashFlow },
       custom: { baseRev: customBaseRev, discount: customDiscount, discountedBase: customDiscountedBase, extraRev: customExtraRev, extraHrRev: customExtraHrRev, logisticRev: logisticRev, tax: customTax, totalCashFlow: customTotalCashFlow },
-      stats: { totalDeliveryBookings, totalPickupBookings, totalDepositFloat, totalDiscountedBookings: safeTotalBookingsFinal * (Number(totalDiscountPct)/100), totalNoDiscountBookings: safeTotalBookingsFinal - (safeTotalBookingsFinal * (Number(totalDiscountPct)/100)), scaleFactor: isCsvMode ? 1 : safeTotalBookingsFinal / pricingState.historicalData.bookings },
+      stats: { totalDeliveryBookings, totalPickupBookings, totalDepositFloat, totalDiscountedBookings: safeTotalBookingsFinal * (totalDiscountShare/100), totalNoDiscountBookings: safeTotalBookingsFinal - (safeTotalBookingsFinal * (totalDiscountShare/100)), scaleFactor: isCsvMode ? 1 : safeTotalBookingsFinal / pricingState.historicalData.bookings },
       kmImpact: { existAvgKm, customAvgKm, avgKmDiff: customAvgKm - existAvgKm, avgKmDiffPct: existAvgKm ? ((customAvgKm - existAvgKm) / existAvgKm) * 100 : 0, existTotalMonthlyKm: existAvgKm * safeTotalBookingsFinal, customTotalMonthlyKm: customAvgKm * safeTotalBookingsFinal, monthlyKmDiff: (customAvgKm * safeTotalBookingsFinal) - (existAvgKm * safeTotalBookingsFinal), kmPackageDiffs },
       breakdown, safeCustomPkgsOutput, isCsvMode, safeTotalBookingsFinal, locationBreakdown
     };
-  }, [totalBookings, catSplit, pricingState.packages, carWeights, deliveryPct, pickupPct, avgDeliveryFee, discountTiers, totalDiscountPct, taxRate, modelType, separateExistDemand, existPkgsShare, baseExtraKmRev, baseExtraHrRev, dataSourceMode, parsedCsvData]);
+  }, [totalBookings, catSplit, pricingState.packages, pricingState.globalModifier, carWeights, deliveryPct, pickupPct, avgDeliveryFee, discountTiers, totalDiscountShare, taxRate, modelType, separateExistDemand, existPkgsShare, baseExtraKmRev, baseExtraHrRev, dataSourceMode, parsedCsvData]);
 
   const handleGenerateRandom = useCallback(() => {
+     if (!activeCustomPkgs || activeCustomPkgs.length === 0) return;
+
      const carIds = Object.keys(carWeights).map(Number);
      const carWeightVals = carIds.map(id => {
         const car = pricingState.vehicles.find(c => c.id === id);
+        if (!car) return 0;
         const catShare = normalizePercentages(catSplit)[car.category] || 0;
         const catTotals = { 'Hatchbacks & Minis': 0, 'Compact SUVs': 0, 'SUVs & 7-Seaters': 0 };
         pricingState.vehicles.forEach(c => { catTotals[c.category] += (Number(carWeights[c.id]) || 0); });
@@ -740,6 +764,7 @@ export default function ProjectionDashboard() {
      
      const selectedCarId = getWeightedRandom(carIds, carWeightVals);
      const car = pricingState.vehicles.find(c => c.id === selectedCarId);
+     if (!car) return;
 
      const pkgKms = activeCustomPkgs.map(p => Number(p.km));
      const pkgShares = activeCustomPkgs.map(p => Number(p.share));
@@ -750,7 +775,7 @@ export default function ProjectionDashboard() {
      const durDays = getWeightedRandom(durDaysKeys, durCounts);
      const durHours = durDays * 24;
 
-     const hasDisc = Math.random() * 100 < Number(totalDiscountPct);
+     const hasDisc = Math.random() * 100 < totalDiscountShare;
      let selectedDisc = 0;
      if (hasDisc) {
         const dTypes = [Number(discountTiers.t1.discount), Number(discountTiers.t2.discount), Number(discountTiers.t3.discount)];
@@ -797,7 +822,8 @@ export default function ProjectionDashboard() {
      const wdMult = wdHours / 24;
      const weMult = weHours / 24;
 
-     const grossBase = (wdPrice * wdMult) + (wePrice * weMult);
+     const modifier = 1 + (pricingState.globalModifier / 100);
+     const grossBase = ((wdPrice * wdMult) + (wePrice * weMult)) * modifier;
      const discAmt = grossBase * (selectedDisc / 100);
      const discBase = grossBase - discAmt;
      const taxable = discBase + extraCharge + extraHrCharge + logisticFee;
@@ -815,10 +841,8 @@ export default function ProjectionDashboard() {
        taxable, taxAmt, deposit: car.deposit, totalCollected
      });
 
-  }, [carWeights, catSplit, activeCustomPkgs, totalDiscountPct, discountTiers, extraKmPct, deliveryPct, pickupPct, deliveryDist, taxRate]);
+  }, [carWeights, catSplit, activeCustomPkgs, totalDiscountShare, discountTiers, extraKmPct, deliveryPct, pickupPct, deliveryDist, taxRate, pricingState.globalModifier, pricingState.vehicles]);
 
-  const formatINR = (val) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(val || 0);
-  const formatKM = (val) => new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(val || 0);
   
   const revDiff = engineResults.custom.totalCashFlow - engineResults.existing.totalCashFlow;
   const revDiffPct = engineResults.existing.totalCashFlow === 0 ? 0 : (revDiff / engineResults.existing.totalCashFlow) * 100;
@@ -837,8 +861,9 @@ export default function ProjectionDashboard() {
   
   const bdWdPrice = refSlab.basePrice + (refSlab.rate * bdTargetKm);
   const bdWePrice = refSlab.weekendBase + (refSlab.weekendRate * bdTargetKm);
-
-  const bdGrossBase = (bdWdPrice * bdWdMult) + (bdWePrice * bdWeMult);
+  
+  const modifier = 1 + (pricingState.globalModifier / 100);
+  const bdGrossBase = ((bdWdPrice * bdWdMult) + (bdWePrice * bdWeMult)) * modifier;
   const bdDiscountAmt = bdGrossBase * (Number(bdDiscount) / 100);
   const bdDiscountedBase = bdGrossBase - bdDiscountAmt;
   
@@ -891,7 +916,7 @@ export default function ProjectionDashboard() {
                   <div className="flex gap-2 flex-wrap mb-4">
                     {optBest.pkgs.map((k,i) => (
                       <span key={i} className="bg-white border border-emerald-200 text-emerald-700 text-xs font-bold px-2 py-1 rounded">
-                        {k} km ({(optBest.shares[i] * 100).toFixed(1)}%)
+                        {Math.round(k)} km ({(optBest.shares[i] * 100).toFixed(1)}%)
                       </span>
                     ))}
                   </div>
@@ -905,15 +930,6 @@ export default function ProjectionDashboard() {
            </div>
         </div>
       )}
-
-      <nav className="bg-[#f04343] text-white px-6 py-4 flex items-center justify-between shadow-md">
-        <div className="flex items-center gap-3">
-          <div className="bg-white/20 p-2 rounded-lg text-white backdrop-blur-sm">
-            <BarChart3 size={22} />
-          </div>
-          <span className="font-bold text-white tracking-wide text-lg">Financial Strategy Simulator</span>
-        </div>
-      </nav>
 
       <div className="flex-1 p-4 md:p-6 w-full flex flex-col xl:flex-row gap-6 max-w-[1600px] mx-auto">
         
@@ -1027,7 +1043,6 @@ export default function ProjectionDashboard() {
                              <input type="number" value={discountTiers[key].share} onChange={e => {
                                  const newTiers = {...discountTiers, [key]: {...discountTiers[key], share: e.target.value}};
                                  setDiscountTiers(newTiers);
-                                 setTotalDiscountPct(String(Number(newTiers.t1.share) + Number(newTiers.t2.share) + Number(newTiers.t3.share)));
                                }} className="w-full border border-slate-300 rounded px-1.5 py-1 text-right text-xs focus:border-[#f04343] font-semibold outline-none" />
                              <span className="absolute right-1.5 top-1.5 text-[9px] text-slate-400">%</span>
                            </div>
@@ -1037,14 +1052,14 @@ export default function ProjectionDashboard() {
                      ))}
                      <div className="flex justify-between items-center pt-2 border-t border-slate-200">
                         <span className="text-[10px] font-bold text-slate-500 uppercase">Total Pool:</span>
-                        <span className="text-xs font-bold text-red-500">{Number(discountTiers.t1.share) + Number(discountTiers.t2.share) + Number(discountTiers.t3.share)}%</span>
+                        <span className="text-xs font-bold text-red-500">{totalDiscountShare}%</span>
                      </div>
-                     <p className="text-[9px] text-slate-400 italic leading-tight pt-1">The remaining {Math.max(0, 100 - (Number(discountTiers.t1.share) + Number(discountTiers.t2.share) + Number(discountTiers.t3.share)))}% of bookings receive 0% discount.</p>
+                     <p className="text-[9px] text-slate-400 italic leading-tight pt-1">The remaining {Math.max(0, 100 - totalDiscountShare)}% of bookings receive 0% discount.</p>
                   </div>
                 ) : (
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-xl font-bold text-red-500">{(avgDiscountPct * 100).toFixed(1)}%</span>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase mt-1">Blended Avg Impact</span>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase mt-1">Blended Avg Impact on {totalDiscountShare}% of bookings</span>
                   </div>
                 )}
               </div>
@@ -1199,9 +1214,9 @@ export default function ProjectionDashboard() {
             <div className="flex items-center justify-between mb-2">
                <span className="text-[10px] font-bold text-slate-400 uppercase">Scenario B Format</span>
                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200">
-                 <button onClick={() => pricingDispatch({type: 'SET_MODEL_TYPE', value: 3})} className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all ${modelType === 3 ? 'bg-white text-[#f04343] shadow-sm border border-slate-200' : 'text-slate-500 hover:bg-slate-200'}`}>3 Pkg</button>
-                 <button onClick={() => pricingDispatch({type: 'SET_MODEL_TYPE', value: 4})} className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all ${modelType === 4 ? 'bg-white text-[#f04343] shadow-sm border border-slate-200' : 'text-slate-500 hover:bg-slate-200'}`}>4 Pkg</button>
-                 <button onClick={() => pricingDispatch({type: 'SET_MODEL_TYPE', value: 5})} className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all ${modelType === 5 ? 'bg-white text-[#f04343] shadow-sm border border-slate-200' : 'text-slate-500 hover:bg-slate-200'}`}>5 Pkg</button>
+                 <button onClick={() => immediateDispatch({type: 'SET_MODEL_TYPE', value: 3})} className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all ${modelType === 3 ? 'bg-white text-[#f04343] shadow-sm border border-slate-200' : 'text-slate-500 hover:bg-slate-200'}`}>3 Pkg</button>
+                 <button onClick={() => immediateDispatch({type: 'SET_MODEL_TYPE', value: 4})} className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all ${modelType === 4 ? 'bg-white text-[#f04343] shadow-sm border border-slate-200' : 'text-slate-500 hover:bg-slate-200'}`}>4 Pkg</button>
+                 <button onClick={() => immediateDispatch({type: 'SET_MODEL_TYPE', value: 5})} className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all ${modelType === 5 ? 'bg-white text-[#f04343] shadow-sm border border-slate-200' : 'text-slate-500 hover:bg-slate-200'}`}>5 Pkg</button>
                </div>
             </div>
 
@@ -1349,7 +1364,7 @@ export default function ProjectionDashboard() {
                </li>
                <li className="flex items-start gap-2">
                  <ArrowRight size={16} className="mt-0.5 shrink-0 text-indigo-500"/> 
-                 <span><strong>Revenue Efficiency:</strong> {revDiff > 0 ? `Transitioning to Scenario B captures ₹${formatINR(revDiff)} more value while aligning closely with actual driving patterns.` : `Scenario A is currently yielding ₹${formatINR(Math.abs(revDiff))} more. Tweak your Custom Slabs to optimize further.`}</span>
+                 <span><strong>Revenue Efficiency:</strong> {revDiff > 0 ? `Transitioning to Scenario B captures ${formatINR(revDiff)} more value while aligning closely with actual driving patterns.` : `Scenario A is currently yielding ${formatINR(Math.abs(revDiff))} more. Tweak your Custom Slabs to optimize further.`}</span>
                </li>
                <li className="flex items-start gap-2">
                  <ArrowRight size={16} className="mt-0.5 shrink-0 text-indigo-500"/> 
@@ -1513,7 +1528,7 @@ export default function ProjectionDashboard() {
                           </div>
                        </div>
                        <div className="flex justify-between items-center border-b border-slate-200 pb-2 bg-white p-2 rounded shadow-sm">
-                          <span className="font-bold text-slate-700">Gross Trip Amount</span>
+                          <span className="font-bold text-slate-700">Gross Trip Amount (+{pricingState.globalModifier}%)</span>
                           <span className="font-bold text-slate-800">{formatINR(bdGrossBase)}</span>
                        </div>
                        <div className="flex justify-between items-center border-b border-slate-200 pb-2">
@@ -1587,7 +1602,7 @@ export default function ProjectionDashboard() {
                               <div className="flex justify-between"><span className="text-slate-500">Package:</span><span className="font-bold">{randomReceipt.targetKm} km</span></div>
                               <div className="flex justify-between"><span className="text-slate-500">WD Hours:</span><span className="font-bold">{Number(randomReceipt.wdHours).toFixed(1)} hrs ({Number(randomReceipt.wdMult).toFixed(2)}x)</span></div>
                               <div className="flex justify-between"><span className="text-slate-500">WE Hours:</span><span className="font-bold">{Number(randomReceipt.weHours).toFixed(1)} hrs ({Number(randomReceipt.weMult).toFixed(2)}x)</span></div>
-                              <div className="flex justify-between mt-2"><span className="text-slate-500">Gross Base:</span><span className="font-bold">{formatINR(randomReceipt.grossBase)}</span></div>
+                              <div className="flex justify-between mt-2"><span className="text-slate-500">Gross Base (+{pricingState.globalModifier}%):</span><span className="font-bold">{formatINR(randomReceipt.grossBase)}</span></div>
                               <div className="flex justify-between text-red-500"><span className="">Discount ({randomReceipt.discPct}%):</span><span className="font-bold">-{formatINR(randomReceipt.discAmt)}</span></div>
                               
                               {(randomReceipt.hasExtraKm || randomReceipt.hasExtraHr || randomReceipt.logisticFee > 0) && <div className="pt-2 mt-2 border-t border-slate-100"></div>}

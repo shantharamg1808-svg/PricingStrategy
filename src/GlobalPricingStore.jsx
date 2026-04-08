@@ -147,7 +147,7 @@ const CARS_DB = CAR_NAMES.map((name, index) => {
   };
 });
 
-const initialPackages = [
+const defaultPackages = [
   { id: 'p1', km: '110', share: '25' },
   { id: 'p2', km: '220', share: '30' },
   { id: 'p3', km: '410', share: '20' },
@@ -156,15 +156,13 @@ const initialPackages = [
 ];
 
 const initialState = {
-  activePage: typeof localStorage !== 'undefined' ? localStorage.getItem('activeView') || 'calculator' : 'calculator',
+  activePage: 'calculator',
   modelType: 4,
-  packages: initialPackages,
+  packages: defaultPackages,
   globalModifier: '0',
   modifierSelection: ['p1', 'p2', 'p3', 'p4'],
   overrides: {},
-  // Vehicles database
   vehicles: CARS_DB,
-  // Historical data
   historicalData: {
     bookings: HISTORICAL_BOOKINGS,
     wdHours: HISTORICAL_WD_HOURS,
@@ -172,9 +170,7 @@ const initialState = {
     extraKmRev: HISTORICAL_EXTRA_KM_REV,
     extraHrRev: HISTORICAL_EXTRA_HR_REV
   },
-  // Default car weights
   defaultCarWeights: DEFAULT_CAR_WEIGHTS,
-  // Constants
   constants: {
     slabKms: SLAB_KMS,
     rationalExtraKmLimit: RATIONAL_EXTRA_KM_LIMIT
@@ -207,6 +203,9 @@ function reducer(state, action) {
         ...state,
         packages: Array.isArray(action.packages) ? action.packages.map(pkg => ({ ...pkg, km: pkg.km === '' ? '' : String(pkg.km), share: pkg.share === '' ? '' : String(pkg.share) })) : state.packages
       };
+      break;
+    case 'RESET_PACKAGES_TO_DEFAULT':
+      newState = { ...state, packages: defaultPackages };
       break;
     case 'SET_GLOBAL_MODIFIER':
       newState = { ...state, globalModifier: action.value === '' ? '' : String(action.value) };
@@ -248,9 +247,6 @@ function reducer(state, action) {
         }
       };
       break;
-    case 'LOAD_FROM_LOCALSTORAGE':
-      newState = { ...state, ...action.data };
-      break;
     default:
       return state;
   }
@@ -276,7 +272,6 @@ function reducer(state, action) {
 }
 
 export function GlobalPricingProvider({ children }) {
-  // Load initial state from localStorage
   const getInitialState = () => {
     if (typeof localStorage === 'undefined') return initialState;
     
@@ -294,7 +289,6 @@ export function GlobalPricingProvider({ children }) {
 
   const [state, dispatch] = useReducer(reducer, null, getInitialState);
 
-  // Debounced dispatch for performance
   const debouncedDispatch = useCallback(
     debounce((action) => {
       dispatch(action);
@@ -302,7 +296,6 @@ export function GlobalPricingProvider({ children }) {
     []
   );
 
-  // For immediate actions that need instant response
   const immediateDispatch = useCallback((action) => {
     dispatch(action);
   }, []);

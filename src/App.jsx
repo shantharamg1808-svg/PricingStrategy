@@ -11,7 +11,9 @@ import {
   LayoutDashboard,
   Scale,
   Download,
-  BarChart3
+  BarChart3,
+  Menu,
+  X
 } from 'lucide-react';
 import TripPackageAnalyzer from './TripPackageAnalyzer.jsx';
 import MultiVehicleDashboard from './MultiVehicleDashboard.jsx';
@@ -203,6 +205,7 @@ function calculateTripData(data, car) {
 function AppInner() {
   const { state: pricingState, dispatch: pricingDispatch } = usePricingStore();
   const [exportCsvFn, setExportCsvFn] = useState(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Clear export handler when switching views (prevents stale handlers)
   React.useEffect(() => {
@@ -347,7 +350,51 @@ function AppInner() {
             </button>
           )}
         </div>
+        <div className="md:hidden">
+            <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="text-white">
+                {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+            </button>
+        </div>
       </nav>
+
+      {isMobileMenuOpen && (
+        <div className="md:hidden bg-white shadow-lg border-t border-slate-200">
+          <div className="flex flex-col p-4 space-y-1">
+          <button
+            onClick={() => { pricingDispatch({ type: 'SET_ACTIVE_PAGE', value: 'calculator' }); setIsMobileMenuOpen(false); }}
+            className={`text-slate-700 py-3 px-4 rounded-lg flex items-center gap-3 transition-all ${pricingState.activePage === 'calculator' ? 'bg-slate-100 font-bold' : ''}`}
+          >
+            <LayoutDashboard size={18} /> Calculator
+          </button>
+          <button
+            onClick={() => { pricingDispatch({ type: 'SET_ACTIVE_PAGE', value: 'analyzer' }); setIsMobileMenuOpen(false); }}
+            className={`text-slate-700 py-3 px-4 rounded-lg flex items-center gap-3 transition-all ${pricingState.activePage === 'analyzer' ? 'bg-slate-100 font-bold' : ''}`}
+          >
+            <Settings2 size={18} /> Trip Package Analyzer
+          </button>
+          <button
+            onClick={() => { pricingDispatch({ type: 'SET_ACTIVE_PAGE', value: 'multivehicle' }); setIsMobileMenuOpen(false); }}
+            className={`text-slate-700 py-3 px-4 rounded-lg flex items-center gap-3 transition-all ${pricingState.activePage === 'multivehicle' ? 'bg-slate-100 font-bold' : ''}`}
+          >
+            <Car size={18} /> Multi-Vehicle Pricing
+          </button>
+          <button
+            onClick={() => { pricingDispatch({ type: 'SET_ACTIVE_PAGE', value: 'projection' }); setIsMobileMenuOpen(false); }}
+            className={`text-slate-700 py-3 px-4 rounded-lg flex items-center gap-3 transition-all ${pricingState.activePage === 'projection' ? 'bg-slate-100 font-bold' : ''}`}
+          >
+            <BarChart3 size={18} /> Revenue Dashboard
+          </button>
+            {exportCsvFn && (
+              <button
+                onClick={() => { exportCsvFn(); setIsMobileMenuOpen(false); }}
+                className="mt-2 flex items-center justify-center gap-2 rounded-lg bg-[#f04343] px-4 py-3 text-sm font-bold text-white shadow-sm transition-colors hover:bg-red-600"
+              >
+                <Download size={16} /> Export CSV
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* MAIN CONTENT APP */}
       {pricingState.activePage === 'calculator' ? (

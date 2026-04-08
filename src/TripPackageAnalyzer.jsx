@@ -15,7 +15,6 @@ import {
 import { usePricingStore } from './GlobalPricingStore.jsx';
 
 // --- DATA INITIALIZATION ---
-// Your provided location data
 const INITIAL_LOCATIONS = [
   { id: 1, name: 'Nandi Hills', distance: 65, days: 1, manualPackageId: null },
   { id: 2, name: 'Kolar', distance: 70, days: 1, manualPackageId: null },
@@ -51,9 +50,8 @@ const INITIAL_LOCATIONS = [
 
 export default function TripPackageAnalyzer() {
   // --- STATE ---
-  const { state: pricingState, dispatch: pricingDispatch } = usePricingStore();
-  const modelType = pricingState.modelType;
-  const packages = pricingState.packages;
+  const { state: pricingState, dispatch: pricingDispatch, immediateDispatch } = usePricingStore();
+  const { modelType, packages } = pricingState;
 
   const [locations, setLocations] = useState(() => {
     const stored = localStorage.getItem('analyzer_locations');
@@ -61,7 +59,7 @@ export default function TripPackageAnalyzer() {
     return INITIAL_LOCATIONS;
   });
   // --- HANDLERS ---
-  const handlePackageChange = (id, newKm) => {
+  const handlePackageKmChange = (id, newKm) => {
     pricingDispatch({ type: 'UPDATE_PACKAGE_KM', id, value: newKm === '' ? '' : Number(newKm) });
   };
 
@@ -78,14 +76,8 @@ export default function TripPackageAnalyzer() {
     setLocations(prev => prev.map(loc => ({ ...loc, manualPackageId: null })));
   };
 
-  // Persist analyzer state to localStorage
-  React.useEffect(() => {
-    localStorage.setItem('analyzer_modelType', String(modelType));
-  }, [modelType]);
-  React.useEffect(() => {
-    localStorage.setItem('analyzer_packages', JSON.stringify(packages));
-  }, [packages]);
-  React.useEffect(() => {
+  // Persist location state to localStorage
+  useEffect(() => {
     localStorage.setItem('analyzer_locations', JSON.stringify(locations));
   }, [locations]);
 
@@ -97,6 +89,7 @@ export default function TripPackageAnalyzer() {
 
   // Process data for the table
   const processedLocations = useMemo(() => {
+    if (activePackages.length === 0) return [];
     return locations.map(loc => {
       const distance = Number(loc.distance) || 0;
       const days = Number(loc.days) || 0;
@@ -116,6 +109,8 @@ export default function TripPackageAnalyzer() {
         const manualPkg = activePackages.find(p => p.id === loc.manualPackageId);
         if (manualPkg) assignedPackage = manualPkg;
       }
+      
+      if (!assignedPackage) assignedPackage = { id: 'none', km: 0 };
 
       const allowedKm = (Number(assignedPackage.km) || 0) * days;
       const difference = allowedKm - roundTrip;
@@ -163,21 +158,27 @@ export default function TripPackageAnalyzer() {
 
           <div className="flex items-center gap-3 bg-slate-100 p-1.5 rounded-lg">
             <button
-              onClick={() => setModelType(3)}
+              onClick={() => immediateDispatch({ type: 'SET_MODEL_TYPE', value: 3 })}
               className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${modelType === 3 ? 'bg-white text-[#f04343] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
             >
               3 Range Model
             </button>
             <button
-              onClick={() => setModelType(4)}
+              onClick={() => immediateDispatch({ type: 'SET_MODEL_TYPE', value: 4 })}
               className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${modelType === 4 ? 'bg-white text-[#f04343] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
             >
               4 Range Model
             </button>
+             <button
+              onClick={() => immediateDispatch({ type: 'SET_MODEL_TYPE', value: 5 })}
+              className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${modelType === 5 ? 'bg-white text-[#f04343] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              5 Range Model
+            </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
           {packages.slice(0, modelType).map((pkg, index) => (
             <div key={pkg.id} className="bg-slate-50 border border-slate-200 rounded-xl p-4">
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
@@ -187,7 +188,7 @@ export default function TripPackageAnalyzer() {
                 <input
                   type="number"
                   value={pkg.km}
-                  onChange={(e) => handlePackageChange(pkg.id, e.target.value)}
+                  onChange={(e) => handlePackageKmChange(pkg.id, e.target.value)}
                   className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-lg font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#f04343]/50 focus:border-[#f04343] transition-all"
                 />
                 <span className="absolute right-3 top-2.5 text-slate-400 font-medium text-sm">km/day</span>
@@ -298,9 +299,11 @@ export default function TripPackageAnalyzer() {
                       onChange={(e) => handleLocationChange(loc.id, 'manualPackageId', e.target.value)}
                       className={`w-full bg-white border ${loc.manualPackageId ? 'border-amber-400 bg-amber-50' : 'border-slate-200'} rounded px-2 py-1.5 font-semibold focus:border-[#f04343] outline-none cursor-pointer`}
                     >
-                      {activePackages.map(pkg => (
+                       {activePackages.length > 0 ? activePackages.map(pkg => (
                         <option key={pkg.id} value={pkg.id}>{pkg.km !== '' ? pkg.km : 0} km/day</option>
-                      ))}
+                      )) : (
+                        <option value="none">N/A</option>
+                      )}
                     </select>
                     {loc.manualPackageId && (
                       <p className="text-[9px] text-amber-600 mt-1 font-semibold uppercase tracking-wider">Manual Override</p>

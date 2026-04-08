@@ -48,7 +48,7 @@ function EditableCellInput({ prefix, color, value, onChange, placeholder }) {
 // --- MAIN DASHBOARD APP ---
 export default function MultiVehicleDashboard({ setExportHandler }) {
   // --- STATE ---
-  const { state: pricingState, dispatch: pricingDispatch } = usePricingStore();
+  const { state: pricingState, dispatch: pricingDispatch, immediateDispatch } = usePricingStore();
   const modelType = pricingState.modelType;
   const globalAdjustmentPct = pricingState.globalModifier;
   const packages = pricingState.packages;
@@ -68,11 +68,11 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
   // Select/Deselect All Logic
   const isAllSelected = activePackages.every(pkg => modifierSelection.includes(pkg.id));
   const handleSelectAll = () => {
-    pricingDispatch({ type: 'SET_MODIFIER_SELECTION', value: isAllSelected ? [] : activePackages.map(p => p.id) });
+    immediateDispatch({ type: 'SET_MODIFIER_SELECTION', value: isAllSelected ? [] : activePackages.map(p => p.id) });
   };
 
   const toggleModifierSelection = (pkgId) => {
-    pricingDispatch({ type: 'TOGGLE_MODIFIER_SELECTION', pkgId });
+    immediateDispatch({ type: 'TOGGLE_MODIFIER_SELECTION', pkgId });
   };
 
   const handleOverride = (vId, pId, field, value) => {
@@ -80,7 +80,7 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
     pricingDispatch({ type: 'SET_OVERRIDE', key, field, value });
   };
 
-  const clearAllOverrides = () => pricingDispatch({ type: 'CLEAR_OVERRIDES' });
+  const clearAllOverrides = () => immediateDispatch({ type: 'CLEAR_OVERRIDES' });
 
   // --- CORE ENGINE LOGIC ---
   const tableData = useMemo(() => {
@@ -159,7 +159,7 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
     });
 
     return allRows;
-  }, [activePackages, globalAdjustmentPct, overrides, modifierSelection]);
+  }, [activePackages, globalAdjustmentPct, overrides, modifierSelection, pricingState.vehicles]);
 
   // --- AVERAGES CALCULATION ---
   const averages = useMemo(() => {
@@ -184,7 +184,7 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
       newWdRate: sumNewWdRate / tableData.length,
       newWeRate: sumNewWeRate / tableData.length,
     };
-  }, [tableData]);
+  }, [tableData, pricingState.vehicles]);
 
   // --- CSV EXPORT LOGIC ---
   const exportCSV = () => {
@@ -229,9 +229,6 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans flex flex-col">
       <div className="flex-1 p-4 md:p-6 w-full flex flex-col gap-6 max-w-[1600px] mx-auto">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-slate-900">Multi-Vehicle Pricing Dashboard</h1>
-        </div>
         
         {/* TOP CONTROLS & AVERAGES GRID */}
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
@@ -245,16 +242,22 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
               </h2>
               <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-lg w-max">
                 <button 
-                  onClick={() => pricingDispatch({ type: 'SET_MODEL_TYPE', value: 3 })}
+                  onClick={() => immediateDispatch({ type: 'SET_MODEL_TYPE', value: 3 })}
                   className={`px-4 py-1.5 rounded-md text-sm font-bold transition-all ${modelType === 3 ? 'bg-white text-[#f04343] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                 >
                   3 Trip Model
                 </button>
                 <button 
-                  onClick={() => pricingDispatch({ type: 'SET_MODEL_TYPE', value: 4 })}
+                  onClick={() => immediateDispatch({ type: 'SET_MODEL_TYPE', value: 4 })}
                   className={`px-4 py-1.5 rounded-md text-sm font-bold transition-all ${modelType === 4 ? 'bg-white text-[#f04343] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                 >
                   4 Trip Model
+                </button>
+                <button 
+                  onClick={() => immediateDispatch({ type: 'SET_MODEL_TYPE', value: 5 })}
+                  className={`px-4 py-1.5 rounded-md text-sm font-bold transition-all ${modelType === 5 ? 'bg-white text-[#f04343] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  5 Trip Model
                 </button>
               </div>
             </div>
@@ -361,7 +364,7 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
 
         {/* MAIN DATA TABLE */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col flex-1 overflow-hidden">
-          <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+          <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center flex-wrap gap-2">
              <div className="flex flex-col">
                <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wide flex items-center gap-2">
                   <Car className="text-[#f04343]" size={18} />
@@ -369,20 +372,24 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
                </h2>
                <span className="text-xs font-medium text-slate-500 mt-0.5">Edit inputs directly in the table to override mathematical regression defaults.</span>
              </div>
-             {Object.keys(overrides).length > 0 && (
-               <button onClick={clearAllOverrides} className="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 bg-white border border-slate-300 px-3 py-1.5 rounded-lg transition-all shadow-sm">
-                 <RotateCcw size={14} /> Clear {Object.keys(overrides).length} Manual Edits
-               </button>
-             )}
+            <div className="flex items-center gap-2">
+                {Object.keys(overrides).length > 0 && (
+                    <button onClick={clearAllOverrides} className="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 bg-white border border-slate-300 px-3 py-1.5 rounded-lg transition-all shadow-sm">
+                        <RotateCcw size={14} /> Clear {Object.keys(overrides).length} Manual Edits
+                    </button>
+                )}
+                <button onClick={() => immediateDispatch({ type: 'RESET_PACKAGES_TO_DEFAULT' })} className="flex items-center gap-1.5 text-xs font-bold text-white bg-[#f04343] hover:bg-red-700 px-3 py-1.5 rounded-lg transition-all shadow-sm">
+                    <RotateCcw size={14} /> Revert to Default Packages
+                </button>
+            </div>
           </div>
 
-          {/* NORMAL SCROLLING TABLE - ALL STICKY/FROZEN CLASSES REMOVED */}
           <div className="overflow-x-auto overflow-y-auto">
             <table className="w-full text-left border-collapse min-w-[1200px]">
               
               <thead>
                 <tr className="text-slate-500 text-[10px] uppercase tracking-wider">
-                  <th className="p-3 font-bold bg-slate-50 border-r border-b-2 border-slate-200 w-[180px]">Vehicle</th>
+                  <th className="p-3 font-bold bg-slate-50 border-r border-b-2 border-slate-200 w-[180px] sticky left-0 z-10">Vehicle</th>
                   <th className="p-3 font-bold text-center bg-white border-b-2 border-slate-200">Ref Slab</th>
                   <th className="p-3 font-bold text-[#f04343] bg-[#fdf2f2] text-center border-r border-b-2 border-slate-200">Target Pkg</th>
                   <th className="p-3 font-bold text-center bg-white border-b-2 border-slate-200">Base Price (₹)</th>
@@ -397,7 +404,7 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
                   <tr key={`${row.vId}-${row.pId}-${idx}`} className="hover:bg-slate-50 transition-colors">
                     
                     {/* Vehicle */}
-                    <td className="p-3 font-bold text-slate-800 bg-slate-50 border-r border-slate-200 truncate max-w-[180px]" title={row.vehicle}>
+                    <td className="p-3 font-bold text-slate-800 bg-slate-50 border-r border-slate-200 truncate max-w-[180px] sticky left-0 z-10" title={row.vehicle}>
                       {row.vehicle}
                     </td>
                     
