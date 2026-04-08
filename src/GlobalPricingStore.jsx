@@ -157,6 +157,7 @@ const defaultPackages = [
 
 const initialState = {
   activePage: 'calculator',
+  selectedCarId: 0,
   modelType: 4,
   packages: defaultPackages,
   globalModifier: '0',
@@ -184,7 +185,10 @@ function reducer(state, action) {
       newState = { ...state, activePage: action.value };
       break;
     case 'SET_MODEL_TYPE':
-      newState = { ...state, modelType: Number(action.value) || 0 };
+      newState = { ...state, modelType: Math.min(4, Number(action.value) || 0) };
+      break;
+    case 'SET_SELECTED_CAR':
+      newState = { ...state, selectedCarId: Number(action.value) || 0 };
       break;
     case 'UPDATE_PACKAGE_KM':
       newState = {

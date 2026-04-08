@@ -398,12 +398,7 @@ export default function ProjectionDashboard() {
         const k1 = 80 + Math.floor(Math.random() * 80); 
         const k2 = k1 + 30 + Math.floor(Math.random() * 120); 
         let testKms = [];
-        if (modelType === 5) {
-          let k3 = k2 + 30 + Math.floor(Math.random() * 100); if (k3 > 500) k3 = 500;
-          let k4 = k3 + 30 + Math.floor(Math.random() * 150); if (k4 > 650) k4 = 650;
-          let k5 = k4 + 30 + Math.floor(Math.random() * 200); if (k5 > 850) k5 = 850;
-          testKms = [k1, k2, k3, k4, k5];
-        } else if (modelType === 4) {
+        if (modelType === 4) {
           let k3 = k2 + 50 + Math.floor(Math.random() * 150); if (k3 > 600) k3 = 600;
           let k4 = k3 + 50 + Math.floor(Math.random() * 200); if (k4 > 700) k4 = 700;
           testKms = [k1, k2, k3, k4];
@@ -758,7 +753,7 @@ export default function ProjectionDashboard() {
         const catShare = normalizePercentages(catSplit)[car.category] || 0;
         const catTotals = { 'Hatchbacks & Minis': 0, 'Compact SUVs': 0, 'SUVs & 7-Seaters': 0 };
         pricingState.vehicles.forEach(c => { catTotals[c.category] += (Number(carWeights[c.id]) || 0); });
-        const carShareInCat = catTotals[car.category] > 0 ? (Number(carWeights[c.id]) || 0) / catTotals[car.category] : 0;
+        const carShareInCat = catTotals[car.category] > 0 ? (Number(carWeights[id]) || 0) / catTotals[car.category] : 0;
         return catShare * carShareInCat;
      });
      

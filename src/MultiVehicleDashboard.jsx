@@ -253,12 +253,7 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
                 >
                   4 Trip Model
                 </button>
-                <button 
-                  onClick={() => immediateDispatch({ type: 'SET_MODEL_TYPE', value: 5 })}
-                  className={`px-4 py-1.5 rounded-md text-sm font-bold transition-all ${modelType === 5 ? 'bg-white text-[#f04343] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                >
-                  5 Trip Model
-                </button>
+
               </div>
             </div>
 
