@@ -57,6 +57,8 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
   const modifierSelection = pricingState.modifierSelection;
   const overrides = pricingState.overrides || {};
 
+  const [showHolidayPricing, setShowHolidayPricing] = useState(false);
+
   // --- HANDLERS ---
   const handlePackageKmChange = (id, newKm) => {
     pricingDispatch({ type: 'UPDATE_PACKAGE_KM', id, value: newKm === '' ? '' : Number(newKm) });
@@ -134,8 +136,14 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
         const finalWeRate = rowOverrides.weRate !== undefined && rowOverrides.weRate !== '' ? rowOverrides.weRate : calcWeRate;
 
         // 5. Compute Final Totals
-        const wdTotal = finalWdBase + (finalWdRate * customKm);
-        const weTotal = finalWeBase + (finalWeRate * customKm);
+        let wdTotal = finalWdBase + (finalWdRate * customKm);
+        let weTotal = finalWeBase + (finalWeRate * customKm);
+
+        if (showHolidayPricing) {
+           const holMod = 1 + ((Number(holidayModifier) || 0) / 100);
+           wdTotal *= holMod;
+           weTotal *= holMod;
+        }
 
         allRows.push({
           vId: car.id,
@@ -301,8 +309,14 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
                   </div>
                   
                   <div className="flex-1">
-                    <label className="block text-xs font-bold text-amber-500 uppercase tracking-wide flex items-center gap-1 mb-2">
-                      <TrendingUp size={12} /> Holiday Premium
+                    <label className="block text-xs font-bold text-amber-500 uppercase tracking-wide flex items-center justify-between gap-1 mb-2">
+                       <span className="flex items-center gap-1"><TrendingUp size={12} /> Holiday Premium</span>
+                       {Number(holidayModifier) !== 0 && (
+                          <label className="relative inline-flex items-center cursor-pointer" title="Simulate Holiday Pricing">
+                            <input type="checkbox" className="sr-only peer" checked={showHolidayPricing} onChange={() => setShowHolidayPricing(!showHolidayPricing)} />
+                            <div className="w-6 h-3.5 bg-amber-200/50 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[1px] after:left-[1.5px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-[12px] after:w-[12px] after:transition-all peer-checked:bg-amber-500"></div>
+                          </label>
+                       )}
                     </label>
                     <div className="relative">
                       <input
@@ -385,6 +399,7 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
                <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wide flex items-center gap-2">
                   <Car className="text-[#f04343]" size={18} />
                   Vehicle Pricing Output ({tableData.length} options)
+                  {showHolidayPricing && <span className="ml-2 text-[10px] bg-amber-500 text-white px-2 py-0.5 rounded-full font-bold">Holiday Simulation</span>}
                </h2>
                <span className="text-xs font-medium text-slate-500 mt-0.5">Edit inputs directly in the table to override mathematical regression defaults.</span>
              </div>
