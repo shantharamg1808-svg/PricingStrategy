@@ -161,6 +161,9 @@ const initialState = {
   modelType: 4,
   packages: defaultPackages,
   globalModifier: '0',
+  holidayModifier: '0',
+  holidayInstances: '6',
+  isHolidayActive: false,
   modifierSelection: ['p1', 'p2', 'p3', 'p4'],
   overrides: {},
   vehicles: CARS_DB,
@@ -214,6 +217,15 @@ function reducer(state, action) {
     case 'SET_GLOBAL_MODIFIER':
       newState = { ...state, globalModifier: action.value === '' ? '' : String(action.value) };
       break;
+    case 'SET_HOLIDAY_MODIFIER':
+      newState = { ...state, holidayModifier: action.value === '' ? '' : String(action.value) };
+      break;
+    case 'SET_HOLIDAY_INSTANCES':
+      newState = { ...state, holidayInstances: action.value === '' ? '' : String(action.value) };
+      break;
+    case 'TOGGLE_HOLIDAY_ACTIVE':
+      newState = { ...state, isHolidayActive: action.value };
+      break;
     case 'SET_MODIFIER_SELECTION':
       newState = { ...state, modifierSelection: Array.isArray(action.value) ? action.value : state.modifierSelection };
       break;
@@ -261,6 +273,9 @@ function reducer(state, action) {
       localStorage.setItem('globalPricingState', JSON.stringify({
         packages: newState.packages,
         globalModifier: newState.globalModifier,
+        holidayModifier: newState.holidayModifier,
+        holidayInstances: newState.holidayInstances,
+        isHolidayActive: newState.isHolidayActive,
         modifierSelection: newState.modifierSelection,
         overrides: newState.overrides,
         defaultCarWeights: newState.defaultCarWeights,

@@ -475,6 +475,11 @@ export default function ProjectionDashboard() {
     let existingDiscount = 0, customDiscount = 0;
     let existingTax = 0, customTax = 0;
     let existAvgKm = 0, customAvgKm = 0;
+    
+    let existingHolidayPremium = 0, customHolidayPremium = 0;
+    
+    // Holiday details breakdown for UI
+    let holidayMetrics = { affectedTotal: 0, affectedWd: 0, affectedWe: 0, premiumWd: 0, premiumWe: 0, totalPremium: 0 };
 
     const breakdown = {
       byPkgExist: [0, 0, 0, 0], byPkgCust: Array(Math.max(3, modelType)).fill(0),
@@ -574,6 +579,33 @@ export default function ProjectionDashboard() {
           customTax += rowCustomTaxable * (safeTaxRate / 100);
        });
 
+       // NOTE: Pure row-by-row holiday logic would require picking specific rows to be holidays.
+       // For now, we apply it uniformly post-aggregation even in CSV mode.
+       if (pricingState.isHolidayActive && Number(pricingState.holidayModifier) > 0) {
+         const holidayMod = Number(pricingState.holidayModifier) / 100;
+         const numHolidayInstances = Number(pricingState.holidayInstances) || 0;
+         const affectedBookings = Math.min(parsedCsvData.length, numHolidayInstances * 15);
+         
+         if (affectedBookings > 0) {
+           const avgCustBaseBookingPrice = customBaseRev / Math.max(1, parsedCsvData.length);
+           const affectedWd = affectedBookings * (1/3);
+           const affectedWe = affectedBookings * (2/3);
+           customHolidayPremium = (affectedWd + affectedWe) * avgCustBaseBookingPrice * holidayMod;
+           customBaseRev += customHolidayPremium;
+           
+           const avgExistBaseBookingPrice = existingBaseRev / Math.max(1, parsedCsvData.length);
+           existingHolidayPremium = (affectedWd + affectedWe) * avgExistBaseBookingPrice * holidayMod;
+           existingBaseRev += existingHolidayPremium;
+           
+           holidayMetrics = { 
+               affectedTotal: affectedBookings, affectedWd, affectedWe, 
+               premiumWd: affectedWd * avgCustBaseBookingPrice * holidayMod, 
+               premiumWe: affectedWe * avgCustBaseBookingPrice * holidayMod, 
+               totalPremium: customHolidayPremium 
+           };
+         }
+       }
+       
        existAvgKm = existAvgKm / parsedCsvData.length;
        customAvgKm = customAvgKm / parsedCsvData.length;
 
@@ -653,6 +685,32 @@ export default function ProjectionDashboard() {
            }
          }
        }
+
+        if (pricingState.isHolidayActive && Number(pricingState.holidayModifier) > 0) {
+           const holidayMod = Number(pricingState.holidayModifier) / 100;
+           const numHolidayInstances = Number(pricingState.holidayInstances) || 0;
+           const affectedBookings = Math.min(safeTotalBookingsFinal, numHolidayInstances * 15);
+           
+           if (affectedBookings > 0) {
+             const avgCustBaseBookingPrice = customBaseRev / Math.max(1, safeTotalBookingsFinal);
+             const affectedWd = affectedBookings * (1/3);
+             const affectedWe = affectedBookings * (2/3);
+             
+             customHolidayPremium = (affectedWd + affectedWe) * avgCustBaseBookingPrice * holidayMod;
+             customBaseRev += customHolidayPremium;
+             
+             const avgExistBaseBookingPrice = existingBaseRev / Math.max(1, safeTotalBookingsFinal);
+             existingHolidayPremium = (affectedWd + affectedWe) * avgExistBaseBookingPrice * holidayMod;
+             existingBaseRev += existingHolidayPremium;
+             
+             holidayMetrics = { 
+               affectedTotal: affectedBookings, affectedWd, affectedWe, 
+               premiumWd: affectedWd * avgCustBaseBookingPrice * holidayMod, 
+               premiumWe: affectedWe * avgCustBaseBookingPrice * holidayMod, 
+               totalPremium: customHolidayPremium 
+             };
+           }
+        }
 
        existingDiscount = existingBaseRev * effectiveGlobalDiscountMultiplier * (totalDiscountShare / 100);
        customDiscount = customBaseRev * effectiveGlobalDiscountMultiplier * (totalDiscountShare / 100);
@@ -746,9 +804,10 @@ export default function ProjectionDashboard() {
       custom: { baseRev: customBaseRev, discount: customDiscount, discountedBase: customDiscountedBase, extraRev: customExtraRev, extraHrRev: customExtraHrRev, logisticRev: logisticRev, tax: customTax, totalCashFlow: customTotalCashFlow },
       stats: { totalDeliveryBookings, totalPickupBookings, totalDepositFloat, totalDiscountedBookings: safeTotalBookingsFinal * (totalDiscountShare/100), totalNoDiscountBookings: safeTotalBookingsFinal - (safeTotalBookingsFinal * (totalDiscountShare/100)), scaleFactor: isCsvMode ? 1 : safeTotalBookingsFinal / pricingState.historicalData.bookings },
       kmImpact: { existAvgKm, customAvgKm, avgKmDiff: customAvgKm - existAvgKm, avgKmDiffPct: existAvgKm ? ((customAvgKm - existAvgKm) / existAvgKm) * 100 : 0, existTotalMonthlyKm: existAvgKm * safeTotalBookingsFinal, customTotalMonthlyKm: customAvgKm * safeTotalBookingsFinal, monthlyKmDiff: (customAvgKm * safeTotalBookingsFinal) - (existAvgKm * safeTotalBookingsFinal), kmPackageDiffs },
-      breakdown, safeCustomPkgsOutput, isCsvMode, safeTotalBookingsFinal, locationBreakdown
+      breakdown, safeCustomPkgsOutput, isCsvMode, safeTotalBookingsFinal, locationBreakdown,
+      holidayMetrics
     };
-  }, [totalBookings, catSplit, pricingState.packages, pricingState.globalModifier, carWeights, deliveryPct, pickupPct, avgDeliveryFee, discountTiers, totalDiscountShare, taxRate, modelType, separateExistDemand, existPkgsShare, baseExtraKmRev, baseExtraHrRev, dataSourceMode, parsedCsvData]);
+  }, [totalBookings, catSplit, pricingState, carWeights, deliveryPct, pickupPct, avgDeliveryFee, discountTiers, totalDiscountShare, taxRate, modelType, separateExistDemand, existPkgsShare, baseExtraKmRev, baseExtraHrRev, dataSourceMode, parsedCsvData]);
 
   const handleGenerateRandom = useCallback(() => {
      if (!activeCustomPkgs || activeCustomPkgs.length === 0) return;
@@ -1067,6 +1126,39 @@ export default function ProjectionDashboard() {
                     <span className="text-xl font-bold text-red-500">{(avgDiscountPct * 100).toFixed(1)}%</span>
                     <span className="text-[10px] font-bold text-slate-400 uppercase mt-1">Blended Avg Impact on {totalDiscountShare}% of bookings</span>
                   </div>
+                )}
+              </div>
+
+              {/* NEW: Holiday Modifier Settings */}
+              <div className="pt-4 border-t border-slate-100">
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-xs font-bold text-amber-500 uppercase flex items-center gap-1"><TrendingUp size={12}/> Holiday Premium</label>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" className="sr-only peer" checked={pricingState.isHolidayActive} onChange={() => immediateDispatch({ type: 'TOGGLE_HOLIDAY_ACTIVE', value: !pricingState.isHolidayActive })} />
+                    <div className="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-amber-500"></div>
+                  </label>
+                </div>
+                {pricingState.isHolidayActive ? (
+                  <div className="bg-amber-50 p-3 rounded-lg border border-amber-200 mt-2 space-y-3">
+                    <div className="flex items-center justify-between">
+                       <span className="text-[10px] font-bold text-amber-700 uppercase">Premium %</span>
+                       <div className="relative w-16">
+                         <input type="number" value={pricingState.holidayModifier} onChange={e => immediateDispatch({ type: 'SET_HOLIDAY_MODIFIER', value: e.target.value })} className="w-full bg-white border border-amber-300 rounded px-1.5 py-1 text-right text-xs focus:border-amber-500 font-bold text-amber-600 outline-none" />
+                         <span className="absolute right-1.5 top-1.5 text-[9px] text-amber-400">%</span>
+                       </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                       <span className="text-[10px] font-bold text-amber-700 uppercase">Instances / Month</span>
+                       <div className="relative w-16">
+                         <input type="number" value={pricingState.holidayInstances} onChange={e => immediateDispatch({ type: 'SET_HOLIDAY_INSTANCES', value: e.target.value })} className="w-full bg-white border border-amber-300 rounded px-1.5 py-1 text-right text-xs focus:border-amber-500 font-bold text-amber-600 outline-none" />
+                       </div>
+                    </div>
+                    <p className="text-[9px] text-amber-600/80 leading-tight">
+                       Affects {Math.round(engineResults.holidayMetrics?.affectedTotal || 0)} bookings/mo. (2/3 WE, 1/3 WD). Adds <span className="font-bold">+{formatINR(engineResults.holidayMetrics?.totalPremium || 0)}</span> premium revenue.
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-[9px] text-slate-400 font-bold mb-3 mt-1">Holiday premium is currently disabled.</p>
                 )}
               </div>
               

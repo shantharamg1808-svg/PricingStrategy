@@ -51,6 +51,7 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
   const { state: pricingState, dispatch: pricingDispatch, immediateDispatch } = usePricingStore();
   const modelType = pricingState.modelType;
   const globalAdjustmentPct = pricingState.globalModifier;
+  const holidayModifier = pricingState.holidayModifier;
   const packages = pricingState.packages;
   const activePackages = packages.slice(0, modelType);
   const modifierSelection = pricingState.modifierSelection;
@@ -63,6 +64,10 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
 
   const handleGlobalAdjustment = (e) => {
     pricingDispatch({ type: 'SET_GLOBAL_MODIFIER', value: e.target.value });
+  };
+
+  const handleHolidayAdjustment = (e) => {
+    pricingDispatch({ type: 'SET_HOLIDAY_MODIFIER', value: e.target.value });
   };
 
   // Select/Deselect All Logic
@@ -278,25 +283,41 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
               
               {/* SELECTIVE GLOBAL MODIFIER */}
               <div className="w-full xl:w-auto xl:flex-[2] min-w-[300px] border-t pt-4 mt-2 xl:border-t-0 xl:pt-0 xl:mt-0 xl:border-l border-slate-200 xl:pl-4">
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-bold text-[#f04343] uppercase tracking-wide flex items-center gap-1">
-                    <Percent size={12} /> Global Modifier
-                  </label>
-                </div>
-                
-                <div className="flex flex-col gap-3">
-                  <div className="relative w-32">
-                    <input
-                      type="number"
-                      value={globalAdjustmentPct}
-                      onChange={handleGlobalAdjustment}
-                      className="w-full bg-[#f04343]/5 border border-[#f04343]/30 rounded-lg px-3 py-2 text-base font-bold text-[#f04343] focus:outline-none focus:ring-2 focus:ring-[#f04343]/50 focus:border-[#f04343] transition-all"
-                      placeholder="e.g. 5 or -5"
-                    />
-                    <span className="absolute right-3 top-2.5 text-[#f04343]/60 font-medium text-sm">%</span>
+                <div className="flex items-center justify-between mb-1 gap-6">
+                  <div className="flex-1">
+                    <label className="block text-xs font-bold text-[#f04343] uppercase tracking-wide flex items-center gap-1 mb-2">
+                      <Percent size={12} /> Global Modifier
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        value={globalAdjustmentPct}
+                        onChange={handleGlobalAdjustment}
+                        className="w-full bg-[#f04343]/5 border border-[#f04343]/30 rounded-lg px-3 py-2 text-base font-bold text-[#f04343] focus:outline-none focus:ring-2 focus:ring-[#f04343]/50 focus:border-[#f04343] transition-all"
+                        placeholder="e.g. 5 or -5"
+                      />
+                      <span className="absolute right-3 top-2.5 text-[#f04343]/60 font-medium text-sm">%</span>
+                    </div>
                   </div>
                   
-                  {/* Range Specific Checkboxes */}
+                  <div className="flex-1">
+                    <label className="block text-xs font-bold text-amber-500 uppercase tracking-wide flex items-center gap-1 mb-2">
+                      <TrendingUp size={12} /> Holiday Premium
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        value={holidayModifier}
+                        onChange={handleHolidayAdjustment}
+                        className="w-full bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-base font-bold text-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-400 transition-all"
+                        placeholder="e.g. 15"
+                      />
+                      <span className="absolute right-3 top-2.5 text-amber-500/60 font-medium text-sm">%</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="flex flex-col gap-3 mt-2">
                   <div className="flex flex-col gap-1.5">
                     <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Apply Modifier To:</span>
                     <div className="flex items-center gap-4 flex-wrap">
