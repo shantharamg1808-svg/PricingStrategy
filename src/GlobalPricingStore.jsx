@@ -136,8 +136,11 @@ const CARS_DB = CAR_NAMES.map((name, index) => {
   if (["Safari XZA+", "Innova Crysta GX", "Safari XZ+", "Marazzo M2"].includes(name)) deposit = 3000;
   if (name === "Jeep Meridian") deposit = 8000;
 
+  const nLow = name.toLowerCase();
+  const transmission = (nLow.includes('auto') || nLow.includes('xza') || nLow.includes('amt') || nLow.includes('at')) ? 'Automatic' : 'Manual';
+
   return {
-    id: index, name, category: categorizeCar(name), extraRate: EXTRA_KM_RATES[index] || 8, deposit,
+    id: index, name, category: categorizeCar(name), transmission, extraRate: EXTRA_KM_RATES[index] || 8, deposit,
     slabs: [
       { km: SLAB_KMS[0], rate: wdRate0, basePrice: wdBase0, ogWd: ogWd[0], weekendRate: weRate0, weekendBase: weBase0, ogWe: ogWe[0] },
       { km: SLAB_KMS[1], rate: wdRate1, basePrice: wdBase1, ogWd: ogWd[1], weekendRate: weRate1, weekendBase: weBase1, ogWe: ogWe[1] },

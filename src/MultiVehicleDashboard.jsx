@@ -157,6 +157,8 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
           vId: car.id,
           pId: pkg.id,
           vehicle: car.name,
+          category: car.category,
+          transmission: car.transmission,
           refSlabKm: closestSlab.km,
           newPackageKm: customKm,
           adjustedKm: adjustedKm,
@@ -214,7 +216,7 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
   // --- CSV EXPORT LOGIC ---
   const exportCSV = () => {
     const headers = [
-      "Vehicle", "Ref Slab KM", "New Package KM", "Selected Duration", "Adjusted Package KM",
+      "Vehicle", "Type", "Transmission", "Ref Slab KM", "New Package KM", "Selected Duration", "Adjusted Package KM",
       "WD Base Price", "WD KM Rate", "Weekday Est. Price", "WD Hourly Rate", "OG Fixed Weekday Slab Price",
       "WE Base Price", "WE KM Rate", "Weekend Est. Price", "WE Hourly Rate", "OG Fixed Weekend Slab Price"
     ];
@@ -223,7 +225,7 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
 
     tableData.forEach(row => {
       const rowData = [
-        `"${row.vehicle}"`, row.refSlabKm, row.newPackageKm, selectedHours, row.adjustedKm,
+        `"${row.vehicle}"`, `"${row.category}"`, `"${row.transmission}"`, row.refSlabKm, row.newPackageKm, selectedHours, row.adjustedKm,
         row.wdBase.toFixed(2), row.wdRate.toFixed(4), row.wdTotal.toFixed(2), row.wdHourlyRate.toFixed(2), row.ogWdTotal.toFixed(2),
         row.weBase.toFixed(2), row.weRate.toFixed(4), row.weTotal.toFixed(2), row.weHourlyRate.toFixed(2), row.ogWeTotal.toFixed(2)
       ];
@@ -478,7 +480,12 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
                     
                     {/* Vehicle */}
                     <td className="p-3 font-bold text-slate-800 bg-slate-50 border-r border-slate-200 truncate max-w-[180px] sticky left-0 z-10" title={row.vehicle}>
-                      {row.vehicle}
+                      <div className="flex flex-col">
+                        <span>{row.vehicle}</span>
+                        <span className="text-[9px] font-semibold text-slate-400 mt-0.5 uppercase tracking-wide">
+                          {row.category} • {row.transmission}
+                        </span>
+                      </div>
                     </td>
                     
                     {/* References */}
