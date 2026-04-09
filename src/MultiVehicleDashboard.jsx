@@ -58,6 +58,10 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
   const overrides = pricingState.overrides || {};
 
   const [showHolidayPricing, setShowHolidayPricing] = useState(false);
+  const [selectedHours, setSelectedHours] = useState(24);
+  const durationMultiplier = Math.max(18, Number(selectedHours) || 24) / 24;
+
+  const resetDuration = () => setSelectedHours(24);
 
   // --- HANDLERS ---
   const handlePackageKmChange = (id, newKm) => {
@@ -136,8 +140,12 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
         const finalWeRate = rowOverrides.weRate !== undefined && rowOverrides.weRate !== '' ? rowOverrides.weRate : calcWeRate;
 
         // 5. Compute Final Totals
-        let wdTotal = finalWdBase + (finalWdRate * customKm);
-        let weTotal = finalWeBase + (finalWeRate * customKm);
+        const trueWdTotal = finalWdBase + (finalWdRate * customKm);
+        const trueWeTotal = finalWeBase + (finalWeRate * customKm);
+
+        let wdTotal = trueWdTotal * durationMultiplier;
+        let weTotal = trueWeTotal * durationMultiplier;
+        const adjustedKm = customKm * durationMultiplier;
 
         if (showHolidayPricing) {
            const holMod = 1 + ((Number(holidayModifier) || 0) / 100);
@@ -151,12 +159,16 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
           vehicle: car.name,
           refSlabKm: closestSlab.km,
           newPackageKm: customKm,
+          adjustedKm: adjustedKm,
           
           wdBase: finalWdBase,
           weBase: finalWeBase,
           wdRate: finalWdRate,
           weRate: finalWeRate,
           
+          wdHourlyRate: trueWdTotal / 24,
+          weHourlyRate: trueWeTotal / 24,
+
           wdTotal: wdTotal,
           weTotal: weTotal,
           
@@ -172,7 +184,7 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
     });
 
     return allRows;
-  }, [activePackages, globalAdjustmentPct, overrides, modifierSelection, pricingState.vehicles]);
+  }, [activePackages, globalAdjustmentPct, overrides, modifierSelection, pricingState.vehicles, durationMultiplier, showHolidayPricing, holidayModifier]);
 
   // --- AVERAGES CALCULATION ---
   const averages = useMemo(() => {
@@ -202,18 +214,18 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
   // --- CSV EXPORT LOGIC ---
   const exportCSV = () => {
     const headers = [
-      "Vehicle", "Ref Slab KM", "New Package KM", 
-      "WD Base Price", "WD KM Rate", "Weekday Est. Price", "OG Fixed Weekday Slab Price",
-      "WE Base Price", "WE KM Rate", "Weekend Est. Price", "OG Fixed Weekend Slab Price"
+      "Vehicle", "Ref Slab KM", "New Package KM", "Selected Duration", "Adjusted Package KM",
+      "WD Base Price", "WD KM Rate", "Weekday Est. Price", "WD Hourly Rate", "OG Fixed Weekday Slab Price",
+      "WE Base Price", "WE KM Rate", "Weekend Est. Price", "WE Hourly Rate", "OG Fixed Weekend Slab Price"
     ];
 
     const csvRows = [headers.join(',')];
 
     tableData.forEach(row => {
       const rowData = [
-        `"${row.vehicle}"`, row.refSlabKm, row.newPackageKm,
-        row.wdBase.toFixed(2), row.wdRate.toFixed(4), row.wdTotal.toFixed(2), row.ogWdTotal.toFixed(2),
-        row.weBase.toFixed(2), row.weRate.toFixed(4), row.weTotal.toFixed(2), row.ogWeTotal.toFixed(2)
+        `"${row.vehicle}"`, row.refSlabKm, row.newPackageKm, selectedHours, row.adjustedKm,
+        row.wdBase.toFixed(2), row.wdRate.toFixed(4), row.wdTotal.toFixed(2), row.wdHourlyRate.toFixed(2), row.ogWdTotal.toFixed(2),
+        row.weBase.toFixed(2), row.weRate.toFixed(4), row.weTotal.toFixed(2), row.weHourlyRate.toFixed(2), row.ogWeTotal.toFixed(2)
       ];
       csvRows.push(rowData.join(','));
     });
@@ -271,6 +283,32 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
             </div>
 
             <div className="flex flex-wrap gap-4 items-start">
+              
+              {/* Duration Selector */}
+              <div className="min-w-[120px] max-w-[150px] border-r border-slate-100 pr-4">
+                <label className="block text-xs font-bold text-indigo-500 uppercase tracking-wide mb-1 flex items-center justify-between">
+                  <span>Duration</span>
+                  {selectedHours !== 24 && <button onClick={resetDuration} className="text-[#f04343] hover:text-red-700 underline text-[9px]">Reset</button>}
+                </label>
+                <div className="flex flex-col gap-2">
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min="18"
+                      value={selectedHours}
+                      onChange={(e) => setSelectedHours(Math.max(18, Number(e.target.value)))}
+                      className="w-full bg-indigo-50 border border-indigo-200 rounded-lg px-2 py-2 text-sm font-bold text-indigo-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all font-mono"
+                    />
+                    <span className="absolute right-2 top-2.5 text-indigo-400 font-bold text-xs uppercase">Hrs</span>
+                  </div>
+                  <div className="flex gap-1 flex-wrap">
+                    {[18, 24, 36, 48].map(h => (
+                       <button key={h} onClick={() => setSelectedHours(h)} className={`px-2 py-0.5 text-[10px] font-bold rounded ${selectedHours === h ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'} transition-all`}>{h}h</button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
               {/* Distance Inputs */}
               {activePackages.map((pkg, index) => (
                 <div key={pkg.id} className="flex-1 min-w-[90px]">
@@ -422,11 +460,15 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
                 <tr className="text-slate-500 text-[10px] uppercase tracking-wider">
                   <th className="p-3 font-bold bg-slate-50 border-r border-b-2 border-slate-200 w-[180px] sticky left-0 z-10">Vehicle</th>
                   <th className="p-3 font-bold text-center bg-white border-b-2 border-slate-200">Ref Slab</th>
-                  <th className="p-3 font-bold text-[#f04343] bg-[#fdf2f2] text-center border-r border-b-2 border-slate-200">Target Pkg</th>
-                  <th className="p-3 font-bold text-center bg-white border-b-2 border-slate-200">Base Price (₹)</th>
+                  <th className="p-3 font-bold text-[#f04343] bg-[#fdf2f2] text-center border-r border-b-2 border-slate-200">
+                     Target Pkg
+                     {selectedHours !== 24 && <span className="block text-[9px] text-[#f04343]/70 font-normal">({selectedHours}h limits)</span>}
+                  </th>
+                  <th className="p-3 font-bold text-center bg-white border-b-2 border-slate-200 min-w-[90px]">Base Price (24h)</th>
                   <th className="p-3 font-bold text-center border-r border-slate-200 bg-white border-b-2">KM Rate (₹)</th>
-                  <th className="p-3 font-bold bg-slate-800 text-white w-[160px] border-b-2 border-slate-800">Weekday Estimate</th>
-                  <th className="p-3 font-bold bg-indigo-900 text-indigo-100 w-[160px] border-b-2 border-indigo-900">Weekend Estimate</th>
+                  <th className="p-3 font-bold text-center border-r border-slate-200 bg-[#f8fafc] border-b-2 min-w-[90px]">Hourly Rate</th>
+                  <th className="p-3 font-bold bg-slate-800 text-white w-[160px] border-b-2 border-slate-800">Weekday Est. ({selectedHours}h)</th>
+                  <th className="p-3 font-bold bg-indigo-900 text-indigo-100 w-[160px] border-b-2 border-indigo-900">Weekend Est. ({selectedHours}h)</th>
                 </tr>
               </thead>
               
@@ -441,7 +483,16 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
                     
                     {/* References */}
                     <td className="p-3 text-slate-500 font-semibold text-center text-xs">{row.refSlabKm} km</td>
-                    <td className="p-3 font-bold text-[#f04343] bg-[#fdf2f2] text-center border-r border-slate-100">{row.newPackageKm} km</td>
+                    <td className="p-3 font-bold text-[#f04343] bg-[#fdf2f2] text-center border-r border-slate-100">
+                      {selectedHours === 24 ? (
+                         <span>{row.newPackageKm} km</span>
+                      ) : (
+                         <div className="flex flex-col">
+                           <span>{Math.round(row.adjustedKm)} km</span>
+                           <span className="text-[9px] text-[#f04343]/60 font-semibold line-through">({row.newPackageKm} km)</span>
+                         </div>
+                      )}
+                    </td>
                     
                     {/* Editable Base Prices */}
                     <td className="p-3">
@@ -468,6 +519,20 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
                             prefix="WE" color={row.isWeRateCustom ? "text-amber-500" : "text-indigo-400"} 
                             value={row.weRate.toFixed(4)} onChange={(v) => handleOverride(row.vId, row.pId, 'weRate', v)} 
                          />
+                      </div>
+                    </td>
+
+                    {/* Hourly Rate */}
+                    <td className="p-3 border-r border-slate-100 bg-[#f8fafc]">
+                      <div className="flex flex-col gap-1.5 items-center">
+                         <div className="flex items-center gap-1">
+                            <span className="text-[9px] w-[18px] font-extrabold text-slate-400">WD</span>
+                            <span className="text-xs font-bold text-slate-700 w-[55px] text-right">₹{row.wdHourlyRate.toFixed(2)}</span>
+                         </div>
+                         <div className="flex items-center gap-1">
+                            <span className="text-[9px] w-[18px] font-extrabold text-indigo-400">WE</span>
+                            <span className="text-xs font-bold text-slate-700 w-[55px] text-right">₹{row.weHourlyRate.toFixed(2)}</span>
+                         </div>
                       </div>
                     </td>
                     
