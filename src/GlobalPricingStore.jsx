@@ -231,7 +231,7 @@ function reducer(state, action) {
       newState = { ...state, isHolidayActive: action.value };
       break;
     case 'SET_SELECTED_HOURS':
-      newState = { ...state, selectedHours: Number(action.value) || 24 };
+      newState = { ...state, selectedHours: action.value === '' ? '' : action.value };
       break;
     case 'SET_MODIFIER_SELECTION':
       newState = { ...state, modifierSelection: Array.isArray(action.value) ? action.value : state.modifierSelection };

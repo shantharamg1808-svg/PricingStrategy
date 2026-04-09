@@ -298,8 +298,8 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
                     <input
                       type="number"
                       min="18"
-                      value={selectedHours}
-                      onChange={(e) => setSelectedHours(Math.max(18, Number(e.target.value)))}
+                      value={selectedHours === '' ? '' : selectedHours}
+                      onChange={(e) => setSelectedHours(e.target.value)}
                       className="w-full bg-indigo-50 border border-indigo-200 rounded-lg px-2 py-2 text-sm font-bold text-indigo-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all font-mono"
                     />
                     <span className="absolute right-2 top-2.5 text-indigo-400 font-bold text-xs uppercase">Hrs</span>
