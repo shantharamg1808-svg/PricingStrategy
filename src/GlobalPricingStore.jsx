@@ -167,6 +167,7 @@ const initialState = {
   holidayModifier: '0',
   holidayInstances: '6',
   isHolidayActive: false,
+  selectedHours: 24,
   modifierSelection: ['p1', 'p2', 'p3', 'p4'],
   overrides: {},
   vehicles: CARS_DB,
@@ -229,6 +230,9 @@ function reducer(state, action) {
     case 'TOGGLE_HOLIDAY_ACTIVE':
       newState = { ...state, isHolidayActive: action.value };
       break;
+    case 'SET_SELECTED_HOURS':
+      newState = { ...state, selectedHours: Number(action.value) || 24 };
+      break;
     case 'SET_MODIFIER_SELECTION':
       newState = { ...state, modifierSelection: Array.isArray(action.value) ? action.value : state.modifierSelection };
       break;
@@ -279,6 +283,7 @@ function reducer(state, action) {
         holidayModifier: newState.holidayModifier,
         holidayInstances: newState.holidayInstances,
         isHolidayActive: newState.isHolidayActive,
+        selectedHours: newState.selectedHours,
         modifierSelection: newState.modifierSelection,
         overrides: newState.overrides,
         defaultCarWeights: newState.defaultCarWeights,

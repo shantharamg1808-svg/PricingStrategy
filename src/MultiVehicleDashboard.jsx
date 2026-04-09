@@ -58,10 +58,11 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
   const overrides = pricingState.overrides || {};
 
   const [showHolidayPricing, setShowHolidayPricing] = useState(false);
-  const [selectedHours, setSelectedHours] = useState(24);
+  const selectedHours = pricingState.selectedHours;
   const durationMultiplier = Math.max(18, Number(selectedHours) || 24) / 24;
 
-  const resetDuration = () => setSelectedHours(24);
+  const resetDuration = () => pricingDispatch({ type: 'SET_SELECTED_HOURS', value: 24 });
+  const setSelectedHours = (val) => pricingDispatch({ type: 'SET_SELECTED_HOURS', value: val });
 
   // --- HANDLERS ---
   const handlePackageKmChange = (id, newKm) => {
