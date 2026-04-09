@@ -172,8 +172,8 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
           wdTotal: wdTotal,
           weTotal: weTotal,
           
-          ogWdTotal: closestSlab.ogWd,
-          ogWeTotal: closestSlab.ogWe,
+          ogWdTotal: closestSlab.ogWd * durationMultiplier,
+          ogWeTotal: closestSlab.ogWe * durationMultiplier,
 
           isWdBaseCustom: rowOverrides.wdBase !== undefined && rowOverrides.wdBase !== '',
           isWeBaseCustom: rowOverrides.weBase !== undefined && rowOverrides.weBase !== '',
