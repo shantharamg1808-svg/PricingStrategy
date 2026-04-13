@@ -130,7 +130,7 @@ function simulateScenarioEngine(testKms, testShares, context, pricingState) {
 
 // --- MAIN DASHBOARD APP ---
 export default function ProjectionDashboard() {
-  const { state: pricingState, dispatch: pricingDispatch, immediateDispatch } = usePricingStore();
+  const { state: pricingState, dispatch: pricingDispatch, immediateDispatch, getComputedBaseFn } = usePricingStore();
   const { modelType, packages } = pricingState;
 
   const [dataSourceMode, setDataSourceMode] = useState('historical'); // 'historical' | 'csv'
@@ -241,6 +241,57 @@ export default function ProjectionDashboard() {
     reader.readAsText(file);
   };
 
+  const getUnifiedPrice = useCallback((car, customKm, isSelected) => {
+      let refSlab = car.slabs[0];
+      let minDiff = Math.abs(customKm - car.slabs[0].km);
+      for (let j = 1; j < car.slabs.length; j++) {
+        const diff = Math.abs(customKm - car.slabs[j].km);
+        if (diff < minDiff) { minDiff = diff; refSlab = car.slabs[j]; }
+      }
+
+      let calculatedBasePrice = getComputedBaseFn ? getComputedBaseFn(car.name) : null;
+      let baseWdRate = refSlab.rate;
+      let baseWeRate = refSlab.weekendRate;
+
+      if (calculatedBasePrice !== null) {
+          const oldWdTotal = refSlab.basePrice + (refSlab.rate * refSlab.km);
+          const naiveNewWdTotal = calculatedBasePrice + (refSlab.rate * refSlab.km);
+          const dampWd = naiveNewWdTotal > 0 ? (Math.max(oldWdTotal, 0) / naiveNewWdTotal) : 1;
+          baseWdRate = refSlab.rate * dampWd;
+
+          const oldWeTotal = refSlab.weekendBase + (refSlab.weekendRate * refSlab.km);
+          const naiveNewWeTotal = calculatedBasePrice + (refSlab.weekendRate * refSlab.km);
+          const dampWe = naiveNewWeTotal > 0 ? (Math.max(oldWeTotal, 0) / naiveNewWeTotal) : 1;
+          baseWeRate = refSlab.weekendRate * dampWe;
+      }
+
+      const difference = customKm - refSlab.km;
+      const diffPercentage = difference / refSlab.km;
+
+      const pctModifier = isSelected ? (1 + (pricingState.globalModifier / 100)) : 1;
+
+      let extraRateBump = 0;
+      if (isSelected) {
+          const activeCustomPkgs = packages.slice(0, modelType);
+          const avgCustomKm = activeCustomPkgs.reduce((sum, p) => sum + (Number(p.km) || 0), 0) / (activeCustomPkgs.length || 1);
+          const targetValue = Number(pricingState.targetExtraRev) || 0;
+          const targetBookings = Number(pricingState.assumedBookings) || Number(totalBookings) || 450;
+          if (targetValue > 0 && targetBookings > 0 && avgCustomKm > 0) {
+              extraRateBump = (targetValue / targetBookings) / (avgCustomKm * 2.5);
+          }
+      }
+
+      const finalWdRate = (baseWdRate * (1 + diffPercentage) * pctModifier) + extraRateBump;
+      const finalWeRate = (baseWeRate * (1 + diffPercentage) * pctModifier) + extraRateBump;
+      
+      const finalWdBase = calculatedBasePrice ?? refSlab.basePrice;
+      const finalWeBase = calculatedBasePrice ?? refSlab.weekendBase;
+      const wdPrice = finalWdBase + (finalWdRate * customKm);
+      const wePrice = finalWeBase + (finalWeRate * customKm);
+
+      return { wdPrice, wePrice };
+  }, [getComputedBaseFn, pricingState.globalModifier, pricingState.targetExtraRev, pricingState.assumedBookings, totalBookings, packages, modelType]);
+
   const avgDeliveryFee = useMemo(() => {
     const norm = normalizePercentages(deliveryDist);
     return (250 * (norm['250'] || 0)) + (300 * (norm['300'] || 0)) + (500 * (norm['500'] || 0)) + (750 * (norm['750'] || 0)) + (1000 * (norm['1000'] || 0));
@@ -255,7 +306,7 @@ export default function ProjectionDashboard() {
     const t1 = (Number(discountTiers.t1.discount) || 0) * (Number(discountTiers.t1.share) || 0);
     const t2 = (Number(discountTiers.t2.discount) || 0) * (Number(discountTiers.t2.share) || 0);
     const t3 = (Number(discountTiers.t3.discount) || 0) * (Number(discountTiers.t3.share) || 0);
-    return (t1 + t2 + t3) / (totalDiscountShare * 100);
+     return (t1 + t2 + t3) / (totalDiscountShare * 100);
   }, [discountTiers, totalDiscountShare]);
 
   const [bdCarId, setBdCarId] = useState(pricingState.vehicles[0].id);
@@ -518,22 +569,9 @@ export default function ProjectionDashboard() {
           let bestPkgIndex = 0;
 
           activeCustomPkgs.forEach((pkg, i) => {
-             const customKm = Number(pkg.km);
-             let refSlab = car.slabs[0];
-             let minDiff = Math.abs(customKm - car.slabs[0].km);
-             for (let j = 1; j < car.slabs.length; j++) {
-               const diff = Math.abs(customKm - car.slabs[j].km);
-               if (diff < minDiff) { minDiff = diff; refSlab = car.slabs[j]; }
-             }
-
-             let calculatedBasePrice = getComputedBase(car.name);
-             const wdPrice = (calculatedBasePrice ?? refSlab.basePrice) + (refSlab.rate * customKm);
-             const wePrice = (calculatedBasePrice ?? refSlab.weekendBase) + (refSlab.weekendRate * customKm);
-             
              const isSelected = pricingState.modifierSelection.includes(activeCustomPkgs[i]?.id);
-             const pkgModifier = isSelected ? modifier : 1;
-
-             const basePrice = ((wdPrice * daysWd) + (wePrice * daysWe)) * pkgModifier;
+             const prices = getUnifiedPrice(car, customKm, isSelected);
+             const basePrice = (prices.wdPrice * daysWd) + (prices.wePrice * daysWe);
 
              const allowedKm = customKm * totalDays;
              const extraKms = Math.max(0, row.distance - allowedKm);
@@ -643,26 +681,15 @@ export default function ProjectionDashboard() {
              const pkgShare = normPkgKeys[i] || 0;
              const totalNodeShare = categoryShare * carShare * pkgShare;
              
-             let refSlab = car.slabs[0];
-             let minDiff = Math.abs(customKm - car.slabs[0].km);
-             for (let j = 1; j < car.slabs.length; j++) {
-               const diff = Math.abs(customKm - car.slabs[j].km);
-               if (diff < minDiff) { minDiff = diff; refSlab = car.slabs[j]; }
-             }
+              const isSelected = pricingState.modifierSelection.includes(activeCustomPkgs[i]?.id);
+              const prices = getUnifiedPrice(car, customKm, isSelected);
 
-             let calculatedBasePrice = getComputedBase(car.name);
-             const custWdPrice = (calculatedBasePrice ?? refSlab.basePrice) + (refSlab.rate * customKm);
-             const custWePrice = (calculatedBasePrice ?? refSlab.weekendBase) + (refSlab.weekendRate * customKm);
+              const nodeWdDays = globalWdDays * totalNodeShare;
+              const nodeWeDays = globalWeDays * totalNodeShare;
 
-             const nodeWdDays = globalWdDays * totalNodeShare;
-             const nodeWeDays = globalWeDays * totalNodeShare;
+              const custTotalNodeRev = (nodeWdDays * prices.wdPrice) + (nodeWeDays * prices.wePrice);
 
-             const isSelected = pricingState.modifierSelection.includes(activeCustomPkgs[i]?.id);
-             const pkgModifier = isSelected ? modifier : 1;
-
-             const custTotalNodeRev = ((nodeWdDays * custWdPrice) + (nodeWeDays * custWePrice)) * pkgModifier;
-
-             customBaseRev += custTotalNodeRev;
+              customBaseRev += custTotalNodeRev;
              breakdown.byPkgCust[i] += custTotalNodeRev;
              breakdown.byCatCust[category] += custTotalNodeRev;
            }
@@ -844,15 +871,11 @@ export default function ProjectionDashboard() {
      const picFee = hasPic ? Number(getWeightedRandom(feeKeys, feeShares)) : 0;
      const logisticFee = delFee + picFee;
 
-     let refSlab = car.slabs[0];
-     let minDiff = Math.abs(selectedKm - car.slabs[0].km);
-     for (let j = 1; j < car.slabs.length; j++) {
-       const diff = Math.abs(selectedKm - car.slabs[j].km);
-       if (diff < minDiff) { minDiff = diff; refSlab = car.slabs[j]; }
-     }
-     
-     const wdPrice = refSlab.basePrice + (refSlab.rate * selectedKm);
-     const wePrice = refSlab.weekendBase + (refSlab.weekendRate * selectedKm);
+     const activePkgId = activeCustomPkgs.find(p => Number(p.km) === selectedKm)?.id || 'p1';
+     const isSelected = pricingState.modifierSelection.includes(activePkgId);
+     const prices = getUnifiedPrice(car, selectedKm, isSelected);
+     const wdPrice = prices.wdPrice;
+     const wePrice = prices.wePrice;
      
      const isHeavyWe = Math.random() > 0.5;
      let weHours = 0, wdHours = 0;
@@ -866,10 +889,7 @@ export default function ProjectionDashboard() {
      const wdMult = wdHours / 24;
      const weMult = weHours / 24;
 
-     const activePkgId = activeCustomPkgs.find(p => Number(p.km) === selectedKm)?.id || 'p1';
-     const isSelected = pricingState.modifierSelection.includes(activePkgId);
-     const pkgModifier = isSelected ? (1 + (pricingState.globalModifier / 100)) : 1;
-     const grossBase = ((wdPrice * wdMult) + (wePrice * weMult)) * pkgModifier;
+     const grossBase = ((wdPrice * wdMult) + (wePrice * weMult));
      const discAmt = grossBase * (selectedDisc / 100);
      const discBase = grossBase - discAmt;
      const taxable = discBase;
@@ -887,7 +907,7 @@ export default function ProjectionDashboard() {
        taxable, taxAmt, deposit: car.deposit, totalCollected
      });
 
-  }, [carWeights, catSplit, activeCustomPkgs, totalDiscountShare, discountTiers, extraKmPct, deliveryPct, pickupPct, deliveryDist, taxRate, pricingState.globalModifier, pricingState.vehicles]);
+  }, [carWeights, catSplit, activeCustomPkgs, totalDiscountShare, discountTiers, extraKmPct, deliveryPct, pickupPct, deliveryDist, taxRate, pricingState.globalModifier, pricingState.vehicles, getUnifiedPrice, pricingState.modifierSelection]);
 
   
   const revDiff = engineResults.custom.totalCashFlow - engineResults.existing.totalCashFlow;
@@ -898,20 +918,13 @@ export default function ProjectionDashboard() {
   const bdWeMult = Number(bdWeHours) / 24;
   const bdTargetKm = Number(bdKm) || 0;
   
-  let refSlab = bdCar.slabs[0];
-  let minDiff = Math.abs(bdTargetKm - bdCar.slabs[0].km);
-  for (let j = 1; j < bdCar.slabs.length; j++) {
-    const diff = Math.abs(bdTargetKm - bdCar.slabs[j].km);
-    if (diff < minDiff) { minDiff = diff; refSlab = bdCar.slabs[j]; }
-  }
-  
-  const bdWdPrice = refSlab.basePrice + (refSlab.rate * bdTargetKm);
-  const bdWePrice = refSlab.weekendBase + (refSlab.weekendRate * bdTargetKm);
-  
   const bdActivePkgId = activeCustomPkgs.find(p => Number(p.km) === bdTargetKm)?.id || 'p1';
   const bdIsSelected = pricingState.modifierSelection.includes(bdActivePkgId);
-  const bdPkgModifier = bdIsSelected ? (1 + (pricingState.globalModifier / 100)) : 1;
-  const bdGrossBase = ((bdWdPrice * bdWdMult) + (bdWePrice * bdWeMult)) * bdPkgModifier;
+  const bdPrices = getUnifiedPrice(bdCar, bdTargetKm, bdIsSelected);
+  const bdWdPrice = bdPrices.wdPrice;
+  const bdWePrice = bdPrices.wePrice;
+  
+  const bdGrossBase = ((bdWdPrice * bdWdMult) + (bdWePrice * bdWeMult));
   const bdDiscountAmt = bdGrossBase * (Number(bdDiscount) / 100);
   const bdDiscountedBase = bdGrossBase - bdDiscountAmt;
   

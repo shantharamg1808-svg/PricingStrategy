@@ -214,6 +214,8 @@ const initialState = {
   vehicles: CARS_DB,
   scenarioBData: null,
   scenarioBWeights: { market: 35, fleet: 65 },
+  targetExtraRev: '',
+  assumedBookings: '450',
   historicalData: {
     bookings: HISTORICAL_BOOKINGS,
     wdHours: HISTORICAL_WD_HOURS,
@@ -287,6 +289,12 @@ function reducer(state, action) {
           : [...state.modifierSelection, action.pkgId]
       };
       break;
+    case 'SET_TARGET_EXTRA_REV':
+      newState = { ...state, targetExtraRev: action.value };
+      break;
+    case 'SET_ASSUMED_BOOKINGS':
+      newState = { ...state, assumedBookings: action.value };
+      break;
     case 'SET_OVERRIDE': {
       const existing = state.overrides[action.key] || {};
       newState = {
@@ -341,6 +349,8 @@ function reducer(state, action) {
         overrides: newState.overrides,
         scenarioBWeights: newState.scenarioBWeights,
         defaultCarWeights: newState.defaultCarWeights,
+        targetExtraRev: newState.targetExtraRev,
+        assumedBookings: newState.assumedBookings,
         activePage: newState.activePage,
         modelType: newState.modelType
       }));

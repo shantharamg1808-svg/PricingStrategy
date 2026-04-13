@@ -62,8 +62,8 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
   const overrides = pricingState.overrides || {};
 
   const [showHolidayPricing, setShowHolidayPricing] = useState(false);
-  const [targetExtraRev, setTargetExtraRev] = useState('');
-  const [assumedBookings, setAssumedBookings] = useState('450');
+  const targetExtraRev = pricingState.targetExtraRev;
+  const assumedBookings = pricingState.assumedBookings;
   
   const selectedHours = pricingState.selectedHours;
   const durationMultiplier = Math.max(18, Number(selectedHours) || 24) / 24;
@@ -494,14 +494,14 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
                     <label className="block text-xs font-bold text-emerald-600 uppercase tracking-wide flex items-center justify-between gap-1 mb-2">
                        <span className="flex items-center gap-1"><Sigma size={12} /> Target Bump</span>
                        <div className="flex items-center text-[9px] gap-1">
-                          Bkgs: <input type="number" value={assumedBookings} onChange={e => setAssumedBookings(e.target.value)} className="w-[40px] appearance-none bg-emerald-50 text-emerald-800 font-bold border border-emerald-200 focus:border-emerald-500 rounded p-0.5 text-center outline-none" />
+                          Bkgs: <input type="number" value={assumedBookings} onChange={e => immediateDispatch({ type: 'SET_ASSUMED_BOOKINGS', value: e.target.value })} className="w-[40px] appearance-none bg-emerald-50 text-emerald-800 font-bold border border-emerald-200 focus:border-emerald-500 rounded p-0.5 text-center outline-none" />
                        </div>
                     </label>
                     <div className="relative">
                       <input
                         type="number"
                         value={targetExtraRev}
-                        onChange={e => setTargetExtraRev(e.target.value)}
+                        onChange={e => immediateDispatch({ type: 'SET_TARGET_EXTRA_REV', value: e.target.value })}
                         className="w-full bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-base font-bold text-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-400 transition-all font-mono"
                         placeholder="e.g. 1000000"
                       />
