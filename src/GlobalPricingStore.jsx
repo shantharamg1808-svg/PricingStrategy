@@ -171,6 +171,8 @@ const initialState = {
   modifierSelection: ['p1', 'p2', 'p3', 'p4'],
   overrides: {},
   vehicles: CARS_DB,
+  scenarioBData: null,
+  scenarioBWeights: { market: 35, fleet: 65 },
   historicalData: {
     bookings: HISTORICAL_BOOKINGS,
     wdHours: HISTORICAL_WD_HOURS,
@@ -261,6 +263,12 @@ function reducer(state, action) {
     case 'CLEAR_OVERRIDES':
       newState = { ...state, overrides: {} };
       break;
+    case 'SET_SCENARIO_B_DATA':
+      newState = { ...state, scenarioBData: action.value };
+      break;
+    case 'SET_SCENARIO_B_WEIGHTS':
+      newState = { ...state, scenarioBWeights: { ...state.scenarioBWeights, ...action.value } };
+      break;
     case 'UPDATE_VEHICLE_WEIGHT':
       newState = {
         ...state,
@@ -286,6 +294,7 @@ function reducer(state, action) {
         selectedHours: newState.selectedHours,
         modifierSelection: newState.modifierSelection,
         overrides: newState.overrides,
+        scenarioBWeights: newState.scenarioBWeights,
         defaultCarWeights: newState.defaultCarWeights,
         activePage: newState.activePage,
         modelType: newState.modelType
@@ -327,11 +336,33 @@ export function GlobalPricingProvider({ children }) {
     dispatch(action);
   }, []);
 
+  const getComputedBaseFn = useCallback((carName) => {
+     if (!state.scenarioBData) return null;
+     const weightMarket = Number(state.scenarioBWeights.market) / 100;
+     const weightFleet = Number(state.scenarioBWeights.fleet) / 100;
+     let maxBase = -1;
+
+     state.scenarioBData.forEach(row => {
+        if (row['Vehicle Model'] && row['Vehicle Model'].trim().toLowerCase() === carName.toLowerCase()) {
+           const marketIdxStr = String(row['Base Price through MP'] || '').replace(/[^0-9.]/g, '');
+           const fleetIdxStr = String(row['Base Price through Cost'] || '').replace(/[^0-9.]/g, '');
+           const marketIdx = parseFloat(marketIdxStr) || 0;
+           const fleetIdx = parseFloat(fleetIdxStr) || 0;
+           const calc = (marketIdx * weightMarket) + (fleetIdx * weightFleet);
+           if (calc > maxBase) {
+               maxBase = calc;
+           }
+        }
+     });
+     return maxBase >= 0 ? maxBase : null;
+  }, [state.scenarioBData, state.scenarioBWeights]);
+
   const value = useMemo(() => ({ 
     state, 
     dispatch: debouncedDispatch,
-    immediateDispatch 
-  }), [state, debouncedDispatch, immediateDispatch]);
+    immediateDispatch,
+    getComputedBaseFn
+  }), [state, debouncedDispatch, immediateDispatch, getComputedBaseFn]);
 
   return <GlobalPricingContext.Provider value={value}>{children}</GlobalPricingContext.Provider>;
 }

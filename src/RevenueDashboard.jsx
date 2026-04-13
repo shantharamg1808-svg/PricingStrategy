@@ -145,8 +145,9 @@ function simulateScenarioEngine(testKms, testShares, context, pricingState) {
           if (diff < minDiff) { minDiff = diff; refSlab = car.slabs[j]; }
         }
 
-        const custWdPrice = refSlab.basePrice + (refSlab.rate * customKm);
-        const custWePrice = refSlab.weekendBase + (refSlab.weekendRate * customKm);
+        let calculatedBasePrice = context.getComputedBaseFn ? context.getComputedBaseFn(car.name) : null;
+        const custWdPrice = (calculatedBasePrice ?? refSlab.basePrice) + (refSlab.rate * customKm);
+        const custWePrice = (calculatedBasePrice ?? refSlab.weekendBase) + (refSlab.weekendRate * customKm);
 
         customBaseRev += (((globalWdDays * totalNodeShare) * custWdPrice) + ((globalWeDays * totalNodeShare) * custWePrice)) * modifier;
       }
@@ -281,6 +282,18 @@ export default function ProjectionDashboard() {
     reader.readAsText(file);
   };
 
+  const handleScenarioBFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+       const text = evt.target.result;
+       const rawData = parseCSV(text);
+       immediateDispatch({ type: 'SET_SCENARIO_B_DATA', value: rawData });
+    };
+    reader.readAsText(file);
+  };
+
 
   const avgDeliveryFee = useMemo(() => {
     const norm = normalizePercentages(deliveryDist);
@@ -378,7 +391,8 @@ export default function ProjectionDashboard() {
       avgDiscountPct: avgDiscountPct, 
       taxRatePct: Number(taxRate) || 0,
       modelType,
-      modifier: 1 + (pricingState.globalModifier / 100)
+      modifier: 1 + (pricingState.globalModifier / 100),
+      getComputedBaseFn: getComputedBase
     };
 
     const TOTAL_ITERATIONS = 25000;
@@ -465,6 +479,27 @@ export default function ProjectionDashboard() {
   }
 
   // --- ENGINE: LIVE REACTIVE UI SIMULATION (HYBRID ROW-BY-ROW OR AGGREGATE) ---
+  const getComputedBase = useCallback((carName) => {
+     if (!pricingState.scenarioBData) return null;
+     const weightMarket = Number(pricingState.scenarioBWeights.market) / 100;
+     const weightFleet = Number(pricingState.scenarioBWeights.fleet) / 100;
+     let maxBase = -1;
+
+     pricingState.scenarioBData.forEach(row => {
+        if (row['Vehicle Model'] && row['Vehicle Model'].trim().toLowerCase() === carName.toLowerCase()) {
+           const marketIdxStr = String(row['Base Price through MP'] || '').replace(/[^0-9.]/g, '');
+           const fleetIdxStr = String(row['Base Price through Cost'] || '').replace(/[^0-9.]/g, '');
+           const marketIdx = parseFloat(marketIdxStr) || 0;
+           const fleetIdx = parseFloat(fleetIdxStr) || 0;
+           const calc = (marketIdx * weightMarket) + (fleetIdx * weightFleet);
+           if (calc > maxBase) {
+               maxBase = calc;
+           }
+        }
+     });
+     return maxBase >= 0 ? maxBase : null;
+  }, [pricingState.scenarioBData, pricingState.scenarioBWeights]);
+
   const engineResults = useMemo(() => {
     const isCsvMode = dataSourceMode === 'csv' && parsedCsvData.length > 0;
     
@@ -545,8 +580,9 @@ export default function ProjectionDashboard() {
                if (diff < minDiff) { minDiff = diff; refSlab = car.slabs[j]; }
              }
 
-             const wdPrice = refSlab.basePrice + (refSlab.rate * customKm);
-             const wePrice = refSlab.weekendBase + (refSlab.weekendRate * customKm);
+             let calculatedBasePrice = getComputedBase(car.name);
+             const wdPrice = (calculatedBasePrice ?? refSlab.basePrice) + (refSlab.rate * customKm);
+             const wePrice = (calculatedBasePrice ?? refSlab.weekendBase) + (refSlab.weekendRate * customKm);
              
              const isSelected = pricingState.modifierSelection.includes(activeCustomPkgs[i]?.id);
              const pkgModifier = isSelected ? modifier : 1;
@@ -668,8 +704,9 @@ export default function ProjectionDashboard() {
                if (diff < minDiff) { minDiff = diff; refSlab = car.slabs[j]; }
              }
 
-             const custWdPrice = refSlab.basePrice + (refSlab.rate * customKm);
-             const custWePrice = refSlab.weekendBase + (refSlab.weekendRate * customKm);
+             let calculatedBasePrice = getComputedBase(car.name);
+             const custWdPrice = (calculatedBasePrice ?? refSlab.basePrice) + (refSlab.rate * customKm);
+             const custWePrice = (calculatedBasePrice ?? refSlab.weekendBase) + (refSlab.weekendRate * customKm);
 
              const nodeWdDays = globalWdDays * totalNodeShare;
              const nodeWeDays = globalWeDays * totalNodeShare;
@@ -1000,6 +1037,58 @@ export default function ProjectionDashboard() {
         
         {/* LEFT COLUMN: SIMULATION CONTROLS */}
         <div className="w-full xl:w-[350px] flex flex-col gap-5 shrink-0">
+
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 overflow-hidden">
+             <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                  <Database size={18} className="text-indigo-500"/> Dynamic Pricing (Scenario B)
+                </h3>
+             </div>
+             
+             {!pricingState.scenarioBData ? (
+                 <div className="border-2 border-dashed border-slate-300 rounded-xl p-6 text-center hover:bg-slate-50 transition-colors relative cursor-pointer">
+                    <input type="file" accept=".csv" onChange={handleScenarioBFileUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                    <UploadCloud className="text-slate-400 mx-auto mb-2" size={32} />
+                    <p className="text-sm font-bold text-slate-600">CSV Mode Base Prices</p>
+                    <p className="text-[10px] text-slate-400 mt-1">Upload weights spreadsheet to compute dynamic base</p>
+                 </div>
+               ) : (
+                 <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                       <FileSpreadsheet className="text-indigo-500" size={20} />
+                       <h4 className="font-extrabold text-indigo-800 text-sm">Dynamic Base Active</h4>
+                    </div>
+                    <p className="text-[10px] text-indigo-600 font-medium mb-3">
+                       Driving computed prices from {pricingState.scenarioBData.length} rows. Overriding hardcoded Scenario B bases.
+                    </p>
+                    
+                    <div className="grid grid-cols-2 gap-3 mb-3">
+                       <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Market Weight</label>
+                          <div className="relative">
+                             <input type="number" 
+                               value={pricingState.scenarioBWeights.market} 
+                               onChange={(e) => immediateDispatch({ type: 'SET_SCENARIO_B_WEIGHTS', value: { market: e.target.value, fleet: 100 - Number(e.target.value) } })}
+                               className="w-full bg-white border border-slate-200 rounded px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-indigo-400" />
+                             <span className="absolute right-2 top-1.5 text-[10px] text-slate-400">%</span>
+                          </div>
+                       </div>
+                       <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Fleet Weight</label>
+                          <div className="relative">
+                             <input type="number" 
+                               value={pricingState.scenarioBWeights.fleet} 
+                               onChange={(e) => immediateDispatch({ type: 'SET_SCENARIO_B_WEIGHTS', value: { fleet: e.target.value, market: 100 - Number(e.target.value) } })}
+                               className="w-full bg-white border border-slate-200 rounded px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-indigo-400" />
+                             <span className="absolute right-2 top-1.5 text-[10px] text-slate-400">%</span>
+                          </div>
+                       </div>
+                    </div>
+                    
+                    <button onClick={() => immediateDispatch({ type: 'SET_SCENARIO_B_DATA', value: null })} className="w-full bg-white border border-indigo-200 text-indigo-600 text-xs font-bold py-1.5 rounded hover:bg-indigo-100 transition-colors">Clear Mode</button>
+                 </div>
+               )}
+          </div>
 
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 overflow-hidden relative">
              <div className="flex items-center justify-between mb-4">

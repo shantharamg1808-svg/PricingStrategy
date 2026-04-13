@@ -48,7 +48,7 @@ function EditableCellInput({ prefix, color, value, onChange, placeholder }) {
 // --- MAIN DASHBOARD APP ---
 export default function MultiVehicleDashboard({ setExportHandler }) {
   // --- STATE ---
-  const { state: pricingState, dispatch: pricingDispatch, immediateDispatch } = usePricingStore();
+  const { state: pricingState, dispatch: pricingDispatch, immediateDispatch, getComputedBaseFn } = usePricingStore();
   const modelType = pricingState.modelType;
   const globalAdjustmentPct = pricingState.globalModifier;
   const holidayModifier = pricingState.holidayModifier;
@@ -125,11 +125,12 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
           pctModifier = 1 + ((Number(globalAdjustmentPct) || 0) / 100);
         }
 
-        // 3. Mathematical Defaults
+        // 3. Mathematical Defaults & Custom Scenario B Substitution
+        const calculatedBasePrice = getComputedBaseFn ? getComputedBaseFn(car.name) : null;
         const calcWdRate = closestSlab.rate * (1 + diffPercentage) * pctModifier;
         const calcWeRate = closestSlab.weekendRate * (1 + diffPercentage) * pctModifier;
-        const calcWdBase = closestSlab.basePrice;
-        const calcWeBase = closestSlab.weekendBase;
+        const calcWdBase = calculatedBasePrice ?? closestSlab.basePrice;
+        const calcWeBase = calculatedBasePrice ?? closestSlab.weekendBase;
 
         // 4. Fetch User Overrides (if any)
         const overrideKey = `${car.id}-${pkg.id}`;
