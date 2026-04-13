@@ -412,12 +412,66 @@ export function GlobalPricingProvider({ children }) {
      return maxBase >= 0 ? maxBase : null;
   }, [state.scenarioBData, state.scenarioBWeights]);
 
+  const getUnifiedPriceFn = useCallback((car, customKm, isSelected) => {
+      let refSlab = car.slabs[0];
+      let minDiff = Math.abs(customKm - car.slabs[0].km);
+      for (let j = 1; j < car.slabs.length; j++) {
+        const diff = Math.abs(customKm - car.slabs[j].km);
+        if (diff < minDiff) { minDiff = diff; refSlab = car.slabs[j]; }
+      }
+
+      let calculatedBasePrice = getComputedBaseFn(car.name);
+      let baseWdRate = refSlab.rate;
+      let baseWeRate = refSlab.weekendRate;
+
+      // Mathematical constraint: Total Price = Base + Rate * KM
+      // If we substitute Base with calculatedBasePrice, the new Rate MUST BE 
+      // (Original Total Price - calculatedBasePrice) / KM
+      if (calculatedBasePrice !== null) {
+          const ogWdPriceAtCustomKm = refSlab.basePrice + (refSlab.rate * customKm);
+          baseWdRate = Math.max(0, (ogWdPriceAtCustomKm - calculatedBasePrice) / customKm);
+
+          const ogWePriceAtCustomKm = refSlab.weekendBase + (refSlab.weekendRate * customKm);
+          baseWeRate = Math.max(0, (ogWePriceAtCustomKm - calculatedBasePrice) / customKm);
+      }
+
+      const difference = customKm - refSlab.km;
+      const diffPercentage = difference / refSlab.km;
+
+      const pctModifier = isSelected ? (1 + (state.globalModifier / 100)) : 1;
+
+      let extraRateBump = 0;
+      if (isSelected) {
+          const activeCustomPkgs = state.packages.slice(0, state.modelType);
+          const avgCustomKm = activeCustomPkgs.reduce((sum, p) => sum + (Number(p.km) || 0), 0) / (activeCustomPkgs.length || 1);
+          const targetValue = Number(state.targetExtraRev) || 0;
+          const targetBookings = Number(state.assumedBookings) || 450;
+          if (targetValue > 0 && targetBookings > 0 && avgCustomKm > 0) {
+              // Rate Bump = (Target Rev / Bookings) / (Avg Km * Avg Booking Duration in Days)
+              // We assume standard average booking duration of 2.5 days for revenue generation math constraints
+              extraRateBump = (targetValue / targetBookings) / (avgCustomKm * 2.5);
+          }
+      }
+
+      const finalWdRate = (baseWdRate * (1 + diffPercentage) * pctModifier) + extraRateBump;
+      const finalWeRate = (baseWeRate * (1 + diffPercentage) * pctModifier) + extraRateBump;
+      
+      const finalWdBase = calculatedBasePrice ?? refSlab.basePrice;
+      const finalWeBase = calculatedBasePrice ?? refSlab.weekendBase;
+
+      const wdPrice = finalWdBase + (finalWdRate * customKm);
+      const wePrice = finalWeBase + (finalWeRate * customKm);
+
+      return { wdPrice, wePrice, finalWdRate, finalWeRate, finalWdBase, finalWeBase, refSlab };
+  }, [getComputedBaseFn, state.globalModifier, state.targetExtraRev, state.assumedBookings, state.packages, state.modelType]);
+
   const value = useMemo(() => ({ 
     state, 
     dispatch: debouncedDispatch,
     immediateDispatch,
-    getComputedBaseFn
-  }), [state, debouncedDispatch, immediateDispatch, getComputedBaseFn]);
+    getComputedBaseFn,
+    getUnifiedPriceFn
+  }), [state, debouncedDispatch, immediateDispatch, getComputedBaseFn, getUnifiedPriceFn]);
 
   return <GlobalPricingContext.Provider value={value}>{children}</GlobalPricingContext.Provider>;
 }

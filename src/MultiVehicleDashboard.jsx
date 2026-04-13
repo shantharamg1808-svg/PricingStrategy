@@ -13,7 +13,8 @@ import {
   Database,
   FileSpreadsheet,
   UploadCloud,
-  CheckCircle2
+  CheckCircle2,
+  Info
 } from 'lucide-react';
 import { usePricingStore, parseCSV } from './GlobalPricingStore.jsx';
 
@@ -52,7 +53,7 @@ function EditableCellInput({ prefix, color, value, onChange, placeholder }) {
 // --- MAIN DASHBOARD APP ---
 export default function MultiVehicleDashboard({ setExportHandler }) {
   // --- STATE ---
-  const { state: pricingState, dispatch: pricingDispatch, immediateDispatch, getComputedBaseFn } = usePricingStore();
+  const { state: pricingState, dispatch: pricingDispatch, immediateDispatch, getUnifiedPriceFn } = usePricingStore();
   const modelType = pricingState.modelType;
   const globalAdjustmentPct = pricingState.globalModifier;
   const holidayModifier = pricingState.holidayModifier;
@@ -127,40 +128,14 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
         const customKm = Number(pkg.km) || 0;
         if (customKm === 0) return; 
 
-        // 1. Find Closest Slab
-        let closestSlab = car.slabs[0];
-        let minDiff = Math.abs(customKm - car.slabs[0].km);
+        const isSelected = modifierSelection.includes(pkg.id);
+        const prices = getUnifiedPriceFn(car, customKm, isSelected);
 
-        for (let i = 1; i < car.slabs.length; i++) {
-          const diff = Math.abs(customKm - car.slabs[i].km);
-          if (diff < minDiff) {
-            minDiff = diff;
-            closestSlab = car.slabs[i];
-          }
-        }
-
-        // 2. Linear Scaling Difference
-        const difference = customKm - closestSlab.km;
-        const diffPercentage = difference / closestSlab.km;
-        
-        // Apply Global Modifier ONLY IF package is selected in the checkboxes
-        let pctModifier = 1;
-        if (modifierSelection.includes(pkg.id)) {
-          pctModifier = 1 + ((Number(globalAdjustmentPct) || 0) / 100);
-        }
-
-        // 3. Mathematical Defaults & Custom Scenario B Substitution
-        const calculatedBasePrice = getComputedBaseFn ? getComputedBaseFn(car.name) : null;
-        
-        let extraRateBump = 0;
-        if (modifierSelection.includes(pkg.id)) {
-           extraRateBump = extraRateAddition;
-        }
-
-        const calcWdRate = (closestSlab.rate * (1 + diffPercentage) * pctModifier) + extraRateBump;
-        const calcWeRate = (closestSlab.weekendRate * (1 + diffPercentage) * pctModifier) + extraRateBump;
-        const calcWdBase = calculatedBasePrice ?? closestSlab.basePrice;
-        const calcWeBase = calculatedBasePrice ?? closestSlab.weekendBase;
+        const calcWdRate = prices.finalWdRate;
+        const calcWeRate = prices.finalWeRate;
+        const calcWdBase = prices.finalWdBase;
+        const calcWeBase = prices.finalWeBase;
+        const closestSlab = prices.refSlab;
 
         // 4. Fetch User Overrides (if any)
         const overrideKey = `${car.id}-${pkg.id}`;
@@ -218,7 +193,7 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
     });
 
     return allRows;
-  }, [activePackages, globalAdjustmentPct, overrides, modifierSelection, pricingState.vehicles, durationMultiplier, showHolidayPricing, holidayModifier, pricingState.pricingMode, pricingState.scenarioBData, pricingState.scenarioBWeights, getComputedBaseFn, targetExtraRev, assumedBookings]);
+  }, [activePackages, globalAdjustmentPct, overrides, modifierSelection, pricingState.vehicles, durationMultiplier, showHolidayPricing, holidayModifier, pricingState.pricingMode, pricingState.scenarioBData, pricingState.scenarioBWeights, getUnifiedPriceFn, targetExtraRev, assumedBookings]);
 
   // --- AVERAGES CALCULATION ---
   const averages = useMemo(() => {

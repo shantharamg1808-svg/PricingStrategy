@@ -130,7 +130,7 @@ function simulateScenarioEngine(testKms, testShares, context, pricingState) {
 
 // --- MAIN DASHBOARD APP ---
 export default function ProjectionDashboard() {
-  const { state: pricingState, dispatch: pricingDispatch, immediateDispatch, getComputedBaseFn } = usePricingStore();
+  const { state: pricingState, dispatch: pricingDispatch, immediateDispatch, getComputedBaseFn, getUnifiedPriceFn } = usePricingStore();
   const { modelType, packages } = pricingState;
 
   const [dataSourceMode, setDataSourceMode] = useState('historical'); // 'historical' | 'csv'
@@ -240,57 +240,6 @@ export default function ProjectionDashboard() {
     };
     reader.readAsText(file);
   };
-
-  const getUnifiedPrice = useCallback((car, customKm, isSelected) => {
-      let refSlab = car.slabs[0];
-      let minDiff = Math.abs(customKm - car.slabs[0].km);
-      for (let j = 1; j < car.slabs.length; j++) {
-        const diff = Math.abs(customKm - car.slabs[j].km);
-        if (diff < minDiff) { minDiff = diff; refSlab = car.slabs[j]; }
-      }
-
-      let calculatedBasePrice = getComputedBaseFn ? getComputedBaseFn(car.name) : null;
-      let baseWdRate = refSlab.rate;
-      let baseWeRate = refSlab.weekendRate;
-
-      if (calculatedBasePrice !== null) {
-          const oldWdTotal = refSlab.basePrice + (refSlab.rate * refSlab.km);
-          const naiveNewWdTotal = calculatedBasePrice + (refSlab.rate * refSlab.km);
-          const dampWd = naiveNewWdTotal > 0 ? (Math.max(oldWdTotal, 0) / naiveNewWdTotal) : 1;
-          baseWdRate = refSlab.rate * dampWd;
-
-          const oldWeTotal = refSlab.weekendBase + (refSlab.weekendRate * refSlab.km);
-          const naiveNewWeTotal = calculatedBasePrice + (refSlab.weekendRate * refSlab.km);
-          const dampWe = naiveNewWeTotal > 0 ? (Math.max(oldWeTotal, 0) / naiveNewWeTotal) : 1;
-          baseWeRate = refSlab.weekendRate * dampWe;
-      }
-
-      const difference = customKm - refSlab.km;
-      const diffPercentage = difference / refSlab.km;
-
-      const pctModifier = isSelected ? (1 + (pricingState.globalModifier / 100)) : 1;
-
-      let extraRateBump = 0;
-      if (isSelected) {
-          const activeCustomPkgs = packages.slice(0, modelType);
-          const avgCustomKm = activeCustomPkgs.reduce((sum, p) => sum + (Number(p.km) || 0), 0) / (activeCustomPkgs.length || 1);
-          const targetValue = Number(pricingState.targetExtraRev) || 0;
-          const targetBookings = Number(pricingState.assumedBookings) || Number(totalBookings) || 450;
-          if (targetValue > 0 && targetBookings > 0 && avgCustomKm > 0) {
-              extraRateBump = (targetValue / targetBookings) / (avgCustomKm * 2.5);
-          }
-      }
-
-      const finalWdRate = (baseWdRate * (1 + diffPercentage) * pctModifier) + extraRateBump;
-      const finalWeRate = (baseWeRate * (1 + diffPercentage) * pctModifier) + extraRateBump;
-      
-      const finalWdBase = calculatedBasePrice ?? refSlab.basePrice;
-      const finalWeBase = calculatedBasePrice ?? refSlab.weekendBase;
-      const wdPrice = finalWdBase + (finalWdRate * customKm);
-      const wePrice = finalWeBase + (finalWeRate * customKm);
-
-      return { wdPrice, wePrice };
-  }, [getComputedBaseFn, pricingState.globalModifier, pricingState.targetExtraRev, pricingState.assumedBookings, totalBookings, packages, modelType]);
 
   const avgDeliveryFee = useMemo(() => {
     const norm = normalizePercentages(deliveryDist);
@@ -570,7 +519,7 @@ export default function ProjectionDashboard() {
 
           activeCustomPkgs.forEach((pkg, i) => {
              const isSelected = pricingState.modifierSelection.includes(activeCustomPkgs[i]?.id);
-             const prices = getUnifiedPrice(car, customKm, isSelected);
+             const prices = getUnifiedPriceFn(car, customKm, isSelected);
              const basePrice = (prices.wdPrice * daysWd) + (prices.wePrice * daysWe);
 
              const allowedKm = customKm * totalDays;
@@ -682,7 +631,7 @@ export default function ProjectionDashboard() {
              const totalNodeShare = categoryShare * carShare * pkgShare;
              
               const isSelected = pricingState.modifierSelection.includes(activeCustomPkgs[i]?.id);
-              const prices = getUnifiedPrice(car, customKm, isSelected);
+              const prices = getUnifiedPriceFn(car, customKm, isSelected);
 
               const nodeWdDays = globalWdDays * totalNodeShare;
               const nodeWeDays = globalWeDays * totalNodeShare;
@@ -873,7 +822,7 @@ export default function ProjectionDashboard() {
 
      const activePkgId = activeCustomPkgs.find(p => Number(p.km) === selectedKm)?.id || 'p1';
      const isSelected = pricingState.modifierSelection.includes(activePkgId);
-     const prices = getUnifiedPrice(car, selectedKm, isSelected);
+     const prices = getUnifiedPriceFn(car, selectedKm, isSelected);
      const wdPrice = prices.wdPrice;
      const wePrice = prices.wePrice;
      
@@ -907,7 +856,7 @@ export default function ProjectionDashboard() {
        taxable, taxAmt, deposit: car.deposit, totalCollected
      });
 
-  }, [carWeights, catSplit, activeCustomPkgs, totalDiscountShare, discountTiers, extraKmPct, deliveryPct, pickupPct, deliveryDist, taxRate, pricingState.globalModifier, pricingState.vehicles, getUnifiedPrice, pricingState.modifierSelection]);
+  }, [carWeights, catSplit, activeCustomPkgs, totalDiscountShare, discountTiers, extraKmPct, deliveryPct, pickupPct, deliveryDist, taxRate, pricingState.globalModifier, pricingState.vehicles, getUnifiedPriceFn, pricingState.modifierSelection]);
 
   
   const revDiff = engineResults.custom.totalCashFlow - engineResults.existing.totalCashFlow;
@@ -920,7 +869,7 @@ export default function ProjectionDashboard() {
   
   const bdActivePkgId = activeCustomPkgs.find(p => Number(p.km) === bdTargetKm)?.id || 'p1';
   const bdIsSelected = pricingState.modifierSelection.includes(bdActivePkgId);
-  const bdPrices = getUnifiedPrice(bdCar, bdTargetKm, bdIsSelected);
+  const bdPrices = getUnifiedPriceFn(bdCar, bdTargetKm, bdIsSelected);
   const bdWdPrice = bdPrices.wdPrice;
   const bdWePrice = bdPrices.wePrice;
   
