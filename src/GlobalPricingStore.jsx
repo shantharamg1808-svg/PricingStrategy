@@ -191,11 +191,11 @@ const CARS_DB = CAR_NAMES.map((name, index) => {
 });
 
 const defaultPackages = [
-  { id: 'p1', km: '110', share: '25' },
-  { id: 'p2', km: '220', share: '30' },
-  { id: 'p3', km: '410', share: '20' },
-  { id: 'p4', km: '520', share: '15' },
-  { id: 'p5', km: '720', share: '10' }
+  { id: 'p1', km: '140', share: '32' },
+  { id: 'p2', km: '320', share: '46' },
+  { id: 'p3', km: '500', share: '16' },
+  { id: 'p4', km: '620', share: '6' },
+  { id: 'p5', km: '720', share: '0' }
 ];
 
 const initialState = {

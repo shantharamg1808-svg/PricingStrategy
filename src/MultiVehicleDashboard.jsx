@@ -62,6 +62,9 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
   const overrides = pricingState.overrides || {};
 
   const [showHolidayPricing, setShowHolidayPricing] = useState(false);
+  const [targetExtraRev, setTargetExtraRev] = useState('');
+  const [assumedBookings, setAssumedBookings] = useState('450');
+  
   const selectedHours = pricingState.selectedHours;
   const durationMultiplier = Math.max(18, Number(selectedHours) || 24) / 24;
 
@@ -114,6 +117,11 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
   const tableData = useMemo(() => {
     let allRows = [];
 
+    const avgCustomKm = activePackages.reduce((sum, p) => sum + (Number(p.km) || 0), 0) / (activePackages.length || 1);
+    const targetValue = Number(targetExtraRev) || 0;
+    const bookingsValue = Number(assumedBookings) || 450;
+    const extraRateAddition = (targetValue > 0 && bookingsValue > 0 && avgCustomKm > 0) ? (targetValue / bookingsValue) / (avgCustomKm * 2.5) : 0;
+
     pricingState.vehicles.forEach(car => {
       activePackages.forEach(pkg => {
         const customKm = Number(pkg.km) || 0;
@@ -143,8 +151,14 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
 
         // 3. Mathematical Defaults & Custom Scenario B Substitution
         const calculatedBasePrice = getComputedBaseFn ? getComputedBaseFn(car.name) : null;
-        const calcWdRate = closestSlab.rate * (1 + diffPercentage) * pctModifier;
-        const calcWeRate = closestSlab.weekendRate * (1 + diffPercentage) * pctModifier;
+        
+        let extraRateBump = 0;
+        if (modifierSelection.includes(pkg.id)) {
+           extraRateBump = extraRateAddition;
+        }
+
+        const calcWdRate = (closestSlab.rate * (1 + diffPercentage) * pctModifier) + extraRateBump;
+        const calcWeRate = (closestSlab.weekendRate * (1 + diffPercentage) * pctModifier) + extraRateBump;
         const calcWdBase = calculatedBasePrice ?? closestSlab.basePrice;
         const calcWeBase = calculatedBasePrice ?? closestSlab.weekendBase;
 
@@ -224,12 +238,12 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
     });
 
     return {
-      wdRate: sumOrigWdRate / pricingState.vehicles.length,
-      weRate: sumOrigWeRate / pricingState.vehicles.length,
-      newWdRate: sumNewWdRate / tableData.length,
-      newWeRate: sumNewWeRate / tableData.length,
+      wdRate: sumOrigWdRate / Math.max(1, pricingState.vehicles.length),
+      weRate: sumOrigWeRate / Math.max(1, pricingState.vehicles.length),
+      newWdRate: sumNewWdRate / Math.max(1, tableData.length),
+      newWeRate: sumNewWeRate / Math.max(1, tableData.length),
     };
-  }, [tableData, pricingState.vehicles]);
+  }, [tableData, pricingState.vehicles, activePackages, modifierSelection, globalAdjustmentPct, holidayModifier, showHolidayPricing, selectedHours, overrides, pricingState.pricingMode, pricingState.scenarioBWeights, pricingState.scenarioBData, targetExtraRev, assumedBookings]);
 
   // --- CSV EXPORT LOGIC ---
   const exportCSV = () => {
@@ -432,9 +446,11 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
                 </div>
               ))}
               
-              {/* SELECTIVE GLOBAL MODIFIER */}
-              <div className="w-full xl:w-auto xl:flex-[2] min-w-[300px] border-t pt-4 mt-2 xl:border-t-0 xl:pt-0 xl:mt-0 xl:border-l border-slate-200 xl:pl-4">
-                <div className="flex items-center justify-between mb-1 gap-6">
+              {/* MODIFIERS & TARGETS */}
+              <div className="w-full xl:w-auto xl:flex-[3] min-w-[300px] border-t pt-4 mt-2 xl:border-t-0 xl:pt-0 xl:mt-0 xl:border-l border-slate-200 xl:pl-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-3">
+                  
+                  {/* Global Modifier */}
                   <div className="flex-1">
                     <label className="block text-xs font-bold text-[#f04343] uppercase tracking-wide flex items-center gap-1 mb-2">
                       <Percent size={12} /> Global Modifier
@@ -472,9 +488,29 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
                       <span className="absolute right-3 top-2.5 text-amber-500/60 font-medium text-sm">%</span>
                     </div>
                   </div>
+
+                  {/* Target Revenue Generator */}
+                  <div>
+                    <label className="block text-xs font-bold text-emerald-600 uppercase tracking-wide flex items-center justify-between gap-1 mb-2">
+                       <span className="flex items-center gap-1"><Sigma size={12} /> Target Bump</span>
+                       <div className="flex items-center text-[9px] gap-1">
+                          Bkgs: <input type="number" value={assumedBookings} onChange={e => setAssumedBookings(e.target.value)} className="w-[40px] appearance-none bg-emerald-50 text-emerald-800 font-bold border border-emerald-200 focus:border-emerald-500 rounded p-0.5 text-center outline-none" />
+                       </div>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        value={targetExtraRev}
+                        onChange={e => setTargetExtraRev(e.target.value)}
+                        className="w-full bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-base font-bold text-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-400 transition-all font-mono"
+                        placeholder="e.g. 1000000"
+                      />
+                      <span className="absolute right-3 top-2.5 text-emerald-500/60 font-medium text-sm">₹</span>
+                    </div>
+                  </div>
                 </div>
                 
-                <div className="flex flex-col gap-3 mt-2">
+                <div className="flex flex-col gap-3 mt-1">
                   <div className="flex flex-col gap-1.5">
                     <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Apply Modifier To:</span>
                     <div className="flex items-center gap-4 flex-wrap">

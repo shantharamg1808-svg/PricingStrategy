@@ -137,7 +137,7 @@ export default function ProjectionDashboard() {
   const [parsedCsvData, setParsedCsvData] = useState([]);
   const [csvStats, setCsvStats] = useState(null);
 
-  const [totalBookings, setTotalBookings] = useState('1360');
+  const [totalBookings, setTotalBookings] = useState('450');
   const [catSplit, setCatSplit] = useState({ 'Hatchbacks & Minis': '54', 'Compact SUVs': '34', 'SUVs & 7-Seaters': '12' });
   const [extraKmPct, setExtraKmPct] = useState('18'); 
   
