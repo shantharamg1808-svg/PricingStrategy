@@ -420,26 +420,18 @@ export function GlobalPricingProvider({ children }) {
         if (diff < minDiff) { minDiff = diff; refSlab = car.slabs[j]; }
       }
 
-      let calculatedBasePrice = getComputedBaseFn(car.name);
-      let baseWdRate = refSlab.rate;
-      let baseWeRate = refSlab.weekendRate;
-
-      // Mathematical constraint: Total Price = Base + Rate * KM
-      // If we substitute Base with calculatedBasePrice, the new Rate MUST BE 
-      // (Original Total Price - calculatedBasePrice) / KM
-      if (calculatedBasePrice !== null) {
-          const ogWdPriceAtCustomKm = refSlab.basePrice + (refSlab.rate * customKm);
-          baseWdRate = Math.max(0, (ogWdPriceAtCustomKm - calculatedBasePrice) / customKm);
-
-          const ogWePriceAtCustomKm = refSlab.weekendBase + (refSlab.weekendRate * customKm);
-          baseWeRate = Math.max(0, (ogWePriceAtCustomKm - calculatedBasePrice) / customKm);
-      }
-
+      const calculatedBasePrice = getComputedBaseFn(car.name);
+      
       const difference = customKm - refSlab.km;
       const diffPercentage = difference / refSlab.km;
-
+      
+      // Original Rate Mathematics BEFORE any modifiers:
+      const ogBaseWdRate = refSlab.rate * (1 + diffPercentage);
+      const ogBaseWeRate = refSlab.weekendRate * (1 + diffPercentage);
+      
       const pctModifier = isSelected ? (1 + (state.globalModifier / 100)) : 1;
 
+      // Target Bumper Mathematics:
       let extraRateBump = 0;
       if (isSelected) {
           const activeCustomPkgs = state.packages.slice(0, state.modelType);
@@ -448,16 +440,38 @@ export function GlobalPricingProvider({ children }) {
           const targetBookings = Number(state.assumedBookings) || 450;
           if (targetValue > 0 && targetBookings > 0 && avgCustomKm > 0) {
               // Rate Bump = (Target Rev / Bookings) / (Avg Km * Avg Booking Duration in Days)
-              // We assume standard average booking duration of 2.5 days for revenue generation math constraints
+              // Standard average booking duration of 2.5 days for revenue generation
               extraRateBump = (targetValue / targetBookings) / (avgCustomKm * 2.5);
           }
       }
 
-      const finalWdRate = (baseWdRate * (1 + diffPercentage) * pctModifier) + extraRateBump;
-      const finalWeRate = (baseWeRate * (1 + diffPercentage) * pctModifier) + extraRateBump;
-      
-      const finalWdBase = calculatedBasePrice ?? refSlab.basePrice;
-      const finalWeBase = calculatedBasePrice ?? refSlab.weekendBase;
+      let finalWdBase, finalWeBase, finalWdRate, finalWeRate;
+
+      if (calculatedBasePrice !== null) {
+          finalWdBase = calculatedBasePrice;
+          finalWeBase = calculatedBasePrice;
+
+          // Target Objective: make the NEW base + NEW rate match the OLD exact trajectory before bumps/modifiers
+          const ogTotalWd = refSlab.basePrice + (ogBaseWdRate * customKm);
+          const ogTotalWe = refSlab.weekendBase + (ogBaseWeRate * customKm);
+
+          // We prevent 0 or negative km rates with a safety floor (30% of standard) if base price overshadows the total price
+          const safetyFloorWd = ogBaseWdRate * 0.3;
+          const safetyFloorWe = ogBaseWeRate * 0.3;
+
+          const naiveNewRateWd = (ogTotalWd - finalWdBase) / customKm;
+          const naiveNewRateWe = (ogTotalWe - finalWeBase) / customKm;
+
+          // Apply pctModifier directly to the rate, cleanly matching Scenario A modifier logic
+          finalWdRate = (Math.max(safetyFloorWd, naiveNewRateWd) * pctModifier) + extraRateBump;
+          finalWeRate = (Math.max(safetyFloorWe, naiveNewRateWe) * pctModifier) + extraRateBump;
+      } else {
+          finalWdBase = refSlab.basePrice;
+          finalWeBase = refSlab.weekendBase;
+          
+          finalWdRate = (ogBaseWdRate * pctModifier) + extraRateBump;
+          finalWeRate = (ogBaseWeRate * pctModifier) + extraRateBump;
+      }
 
       const wdPrice = finalWdBase + (finalWdRate * customKm);
       const wePrice = finalWeBase + (finalWeRate * customKm);
