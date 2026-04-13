@@ -24,6 +24,46 @@ function normalizePercentages(obj) {
   return normalized;
 }
 
+export function parseCSV(text) {
+  const rows = [];
+  let row = [];
+  let curr = '';
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (inQuotes) {
+      if (char === '"' && text[i+1] === '"') { curr += '"'; i++; } 
+      else if (char === '"') { inQuotes = false; }
+      else { curr += char; }
+    } else {
+      if (char === '"') { inQuotes = true; }
+      else if (char === ',') { row.push(curr.trim()); curr = ''; }
+      else if (char === '\n' || char === '\r') {
+         row.push(curr.trim()); curr = '';
+         if (row.length > 1 || row[0] !== '') rows.push(row);
+         row = [];
+         if (char === '\r' && text[i+1] === '\n') i++; 
+      } else {
+         curr += char;
+      }
+    }
+  }
+  if (curr) row.push(curr.trim());
+  if (row.length > 0) rows.push(row);
+  
+  if (rows.length === 0) return [];
+  const headers = rows[0];
+  const data = [];
+  for (let i = 1; i < rows.length; i++) {
+    const obj = {};
+    for (let j = 0; j < headers.length; j++) {
+       if (headers[j]) obj[headers[j]] = rows[i][j] || '';
+    }
+    data.push(obj);
+  }
+  return data;
+}
+
 // --- VEHICLES DATABASE ---
 const CAR_NAMES = [
   "Alto 800 VXI", "S-Presso VXI", "Wagon R VXI", "Swift VXI", "Glanza E", "Glanza S", "Tata Altroz", 
@@ -168,6 +208,7 @@ const initialState = {
   holidayInstances: '6',
   isHolidayActive: false,
   selectedHours: 24,
+  pricingMode: 'A',
   modifierSelection: ['p1', 'p2', 'p3', 'p4'],
   overrides: {},
   vehicles: CARS_DB,
@@ -263,6 +304,9 @@ function reducer(state, action) {
     case 'CLEAR_OVERRIDES':
       newState = { ...state, overrides: {} };
       break;
+    case 'SET_PRICING_MODE':
+      newState = { ...state, pricingMode: action.value };
+      break;
     case 'SET_SCENARIO_B_DATA':
       newState = { ...state, scenarioBData: action.value };
       break;
@@ -292,6 +336,7 @@ function reducer(state, action) {
         holidayInstances: newState.holidayInstances,
         isHolidayActive: newState.isHolidayActive,
         selectedHours: newState.selectedHours,
+        pricingMode: newState.pricingMode,
         modifierSelection: newState.modifierSelection,
         overrides: newState.overrides,
         scenarioBWeights: newState.scenarioBWeights,
@@ -337,7 +382,7 @@ export function GlobalPricingProvider({ children }) {
   }, []);
 
   const getComputedBaseFn = useCallback((carName) => {
-     if (!state.scenarioBData) return null;
+     if (state.pricingMode !== 'B' || !state.scenarioBData) return null;
      const weightMarket = Number(state.scenarioBWeights.market) / 100;
      const weightFleet = Number(state.scenarioBWeights.fleet) / 100;
      let maxBase = -1;

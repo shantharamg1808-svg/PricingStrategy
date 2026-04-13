@@ -9,9 +9,13 @@ import {
   Calculator,
   Percent,
   Sigma,
-  RotateCcw
+  RotateCcw,
+  Database,
+  FileSpreadsheet,
+  UploadCloud,
+  CheckCircle2
 } from 'lucide-react';
-import { usePricingStore } from './GlobalPricingStore.jsx';
+import { usePricingStore, parseCSV } from './GlobalPricingStore.jsx';
 
 // --- HELPER COMPONENT FOR EDITABLE CELLS ---
 function EditableCellInput({ prefix, color, value, onChange, placeholder }) {
@@ -93,6 +97,18 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
   };
 
   const clearAllOverrides = () => immediateDispatch({ type: 'CLEAR_OVERRIDES' });
+
+  const handleScenarioBFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+       const text = evt.target.result;
+       const rawData = parseCSV(text);
+       immediateDispatch({ type: 'SET_SCENARIO_B_DATA', value: rawData });
+    };
+    reader.readAsText(file);
+  };
 
   // --- CORE ENGINE LOGIC ---
   const tableData = useMemo(() => {
@@ -263,9 +279,94 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
           
           {/* CONFIGURATION PANEL */}
-          <div className="xl:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5 border-b border-slate-100 pb-4">
-              <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+          <div className="xl:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex flex-col gap-6">
+            
+            {/* PRICING MODE TOGGLE */}
+            <div className={`p-4 rounded-xl border ${pricingState.pricingMode === 'B' ? 'bg-indigo-50 border-indigo-200' : 'bg-slate-50 border-slate-200'}`}>
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                 <div>
+                    <h2 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-1">
+                      <Database className={`${pricingState.pricingMode === 'B' ? 'text-indigo-500' : 'text-slate-400'}`} size={16} />
+                      Pricing Strategy Mode
+                    </h2>
+                    <p className="text-[10px] text-slate-500">
+                      {pricingState.pricingMode === 'A' ? 'Scenario A: Utilizing standard hardcoded base prices and regression formulas.' : 'Scenario B: Dynamic base prices governed by Market/Fleet weight distributions.'}
+                    </p>
+                 </div>
+                 
+                 <div className="flex bg-white p-1 rounded-lg border border-slate-200 shrink-0 shadow-sm">
+                    <button 
+                      onClick={() => immediateDispatch({ type: 'SET_PRICING_MODE', value: 'A' })}
+                      className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all flex items-center gap-1.5 ${pricingState.pricingMode === 'A' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
+                    >
+                      <CheckCircle2 size={14} className={pricingState.pricingMode === 'A' ? 'opacity-100' : 'opacity-0 hidden'} /> Scenario A
+                    </button>
+                    <button 
+                      onClick={() => immediateDispatch({ type: 'SET_PRICING_MODE', value: 'B' })}
+                      className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all flex items-center gap-1.5 ${pricingState.pricingMode === 'B' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
+                    >
+                      <CheckCircle2 size={14} className={pricingState.pricingMode === 'B' ? 'opacity-100' : 'opacity-0 hidden'} /> Scenario B
+                    </button>
+                 </div>
+              </div>
+
+              {/* CSV Upload / Weight Sliders (Only visible in Mode B) */}
+              {pricingState.pricingMode === 'B' && (
+                <div className="mt-4 pt-4 border-t border-indigo-100 animate-in slide-in-from-top-2">
+                   {!pricingState.scenarioBData ? (
+                       <div className="border border-dashed border-indigo-300 rounded-lg p-5 text-center bg-white hover:bg-indigo-50/50 transition-colors relative cursor-pointer group">
+                          <input type="file" accept=".csv" onChange={handleScenarioBFileUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
+                          <UploadCloud className="text-indigo-400 mx-auto mb-2 group-hover:text-indigo-600 transition-colors" size={24} />
+                          <p className="text-xs font-bold text-indigo-900 mb-0.5">Upload CSV Weights Sheet</p>
+                          <p className="text-[10px] text-indigo-500">Enable algorithmic dynamic base pricing</p>
+                       </div>
+                   ) : (
+                       <div className="bg-white rounded-lg p-4 border border-indigo-100 shadow-sm flex flex-col md:flex-row gap-6 items-center">
+                          <div className="flex-1 flex gap-4 w-full">
+                             <div className="flex-1">
+                                <label className="block text-[10px] font-bold text-indigo-500 uppercase tracking-wide mb-1.5">Market Weight</label>
+                                <div className="relative">
+                                   <input type="number" 
+                                     value={pricingState.scenarioBWeights.market} 
+                                     onChange={(e) => immediateDispatch({ type: 'SET_SCENARIO_B_WEIGHTS', value: { market: e.target.value, fleet: 100 - Number(e.target.value) } })}
+                                     className="w-full bg-slate-50 border border-slate-200 rounded-md px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 transition-all" />
+                                   <span className="absolute right-3 top-2.5 text-[10px] font-bold text-slate-400">%</span>
+                                </div>
+                             </div>
+                             <div className="flex-1">
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1.5">Fleet Weight</label>
+                                <div className="relative">
+                                   <input type="number" 
+                                     value={pricingState.scenarioBWeights.fleet} 
+                                     onChange={(e) => immediateDispatch({ type: 'SET_SCENARIO_B_WEIGHTS', value: { fleet: e.target.value, market: 100 - Number(e.target.value) } })}
+                                     className="w-full bg-slate-50 border border-slate-200 rounded-md px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 transition-all" />
+                                   <span className="absolute right-3 top-2.5 text-[10px] font-bold text-slate-400">%</span>
+                                </div>
+                             </div>
+                          </div>
+                          
+                          <div className="shrink-0 flex flex-col items-end border-l border-indigo-50 pl-6 space-y-2 w-full md:w-auto">
+                             <div className="flex items-center gap-2 bg-indigo-50 px-2 py-1 rounded text-[10px] font-bold text-indigo-700">
+                               <FileSpreadsheet size={12} /> Data Linked ({pricingState.scenarioBData.length} records)
+                             </div>
+                             <button onClick={() => immediateDispatch({ type: 'SET_SCENARIO_B_DATA', value: null })} className="text-[10px] font-bold text-red-500 hover:text-red-700 underline">Remove Data</button>
+                          </div>
+                       </div>
+                   )}
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-t border-slate-100 pt-6 mt-2 relative">
+               {pricingState.pricingMode === 'B' && (
+                 <div className="absolute inset-0 bg-white/40 backdrop-blur-[1px] z-20 flex items-center justify-center">
+                    <span className="bg-indigo-100 text-indigo-800 text-xs font-bold px-3 py-1.5 rounded-full shadow-sm animate-pulse border border-indigo-200">
+                      Settings controlled by Scenario B Weights
+                    </span>
+                 </div>
+               )}
+               
+              <h2 className={`text-lg font-bold flex items-center gap-2 ${pricingState.pricingMode === 'B' ? 'text-slate-300' : 'text-slate-800'}`}>
                 <Settings2 className="text-[#f04343]" size={20} />
                 Package Settings
               </h2>

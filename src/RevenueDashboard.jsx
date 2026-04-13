@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { usePricingStore, normalizePercentages } from './GlobalPricingStore.jsx';
+import { usePricingStore, normalizePercentages, parseCSV } from './GlobalPricingStore.jsx';
 import { 
   Calculator, 
   TrendingUp, 
@@ -57,47 +57,6 @@ function getWeightedRandom(options, weights) {
         }
     }
     return options[options.length - 1]; 
-}
-
-// --- LIGHTWEIGHT CSV PARSER ---
-function parseCSV(text) {
-  const rows = [];
-  let row = [];
-  let curr = '';
-  let inQuotes = false;
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i];
-    if (inQuotes) {
-      if (char === '"' && text[i+1] === '"') { curr += '"'; i++; } 
-      else if (char === '"') { inQuotes = false; }
-      else { curr += char; }
-    } else {
-      if (char === '"') { inQuotes = true; }
-      else if (char === ',') { row.push(curr.trim()); curr = ''; }
-      else if (char === '\n' || char === '\r') {
-         row.push(curr.trim()); curr = '';
-         if (row.length > 1 || row[0] !== '') rows.push(row);
-         row = [];
-         if (char === '\r' && text[i+1] === '\n') i++; 
-      } else {
-         curr += char;
-      }
-    }
-  }
-  if (curr) row.push(curr.trim());
-  if (row.length > 0) rows.push(row);
-  
-  if (rows.length === 0) return [];
-  const headers = rows[0];
-  const data = [];
-  for (let i = 1; i < rows.length; i++) {
-    const obj = {};
-    for (let j = 0; j < headers.length; j++) {
-       if (headers[j]) obj[headers[j]] = rows[i][j] || '';
-    }
-    data.push(obj);
-  }
-  return data;
 }
 
 // Location data for rational customer analysis
@@ -281,19 +240,6 @@ export default function ProjectionDashboard() {
     };
     reader.readAsText(file);
   };
-
-  const handleScenarioBFileUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-       const text = evt.target.result;
-       const rawData = parseCSV(text);
-       immediateDispatch({ type: 'SET_SCENARIO_B_DATA', value: rawData });
-    };
-    reader.readAsText(file);
-  };
-
 
   const avgDeliveryFee = useMemo(() => {
     const norm = normalizePercentages(deliveryDist);
@@ -1037,58 +983,6 @@ export default function ProjectionDashboard() {
         
         {/* LEFT COLUMN: SIMULATION CONTROLS */}
         <div className="w-full xl:w-[350px] flex flex-col gap-5 shrink-0">
-
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 overflow-hidden">
-             <div className="flex items-center justify-between mb-4">
-                <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                  <Database size={18} className="text-indigo-500"/> Dynamic Pricing (Scenario B)
-                </h3>
-             </div>
-             
-             {!pricingState.scenarioBData ? (
-                 <div className="border-2 border-dashed border-slate-300 rounded-xl p-6 text-center hover:bg-slate-50 transition-colors relative cursor-pointer">
-                    <input type="file" accept=".csv" onChange={handleScenarioBFileUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
-                    <UploadCloud className="text-slate-400 mx-auto mb-2" size={32} />
-                    <p className="text-sm font-bold text-slate-600">CSV Mode Base Prices</p>
-                    <p className="text-[10px] text-slate-400 mt-1">Upload weights spreadsheet to compute dynamic base</p>
-                 </div>
-               ) : (
-                 <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                       <FileSpreadsheet className="text-indigo-500" size={20} />
-                       <h4 className="font-extrabold text-indigo-800 text-sm">Dynamic Base Active</h4>
-                    </div>
-                    <p className="text-[10px] text-indigo-600 font-medium mb-3">
-                       Driving computed prices from {pricingState.scenarioBData.length} rows. Overriding hardcoded Scenario B bases.
-                    </p>
-                    
-                    <div className="grid grid-cols-2 gap-3 mb-3">
-                       <div>
-                          <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Market Weight</label>
-                          <div className="relative">
-                             <input type="number" 
-                               value={pricingState.scenarioBWeights.market} 
-                               onChange={(e) => immediateDispatch({ type: 'SET_SCENARIO_B_WEIGHTS', value: { market: e.target.value, fleet: 100 - Number(e.target.value) } })}
-                               className="w-full bg-white border border-slate-200 rounded px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-indigo-400" />
-                             <span className="absolute right-2 top-1.5 text-[10px] text-slate-400">%</span>
-                          </div>
-                       </div>
-                       <div>
-                          <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Fleet Weight</label>
-                          <div className="relative">
-                             <input type="number" 
-                               value={pricingState.scenarioBWeights.fleet} 
-                               onChange={(e) => immediateDispatch({ type: 'SET_SCENARIO_B_WEIGHTS', value: { fleet: e.target.value, market: 100 - Number(e.target.value) } })}
-                               className="w-full bg-white border border-slate-200 rounded px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-indigo-400" />
-                             <span className="absolute right-2 top-1.5 text-[10px] text-slate-400">%</span>
-                          </div>
-                       </div>
-                    </div>
-                    
-                    <button onClick={() => immediateDispatch({ type: 'SET_SCENARIO_B_DATA', value: null })} className="w-full bg-white border border-indigo-200 text-indigo-600 text-xs font-bold py-1.5 rounded hover:bg-indigo-100 transition-colors">Clear Mode</button>
-                 </div>
-               )}
-          </div>
 
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 overflow-hidden relative">
              <div className="flex items-center justify-between mb-4">
