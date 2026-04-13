@@ -455,9 +455,9 @@ export function GlobalPricingProvider({ children }) {
           const ogTotalWd = refSlab.basePrice + (ogBaseWdRate * customKm);
           const ogTotalWe = refSlab.weekendBase + (ogBaseWeRate * customKm);
 
-          // We prevent 0 or negative km rates with a safety floor (30% of standard) if base price overshadows the total price
-          const safetyFloorWd = ogBaseWdRate * 0.3;
-          const safetyFloorWe = ogBaseWeRate * 0.3;
+          // We prevent exactly 0 or negative km rates with a minimal absolute floor (0.01) so driving extra KMs is never completely free
+          const safetyFloorWd = 0.01;
+          const safetyFloorWe = 0.01;
 
           const naiveNewRateWd = (ogTotalWd - finalWdBase) / customKm;
           const naiveNewRateWe = (ogTotalWe - finalWeBase) / customKm;
