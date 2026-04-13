@@ -218,7 +218,7 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
     });
 
     return allRows;
-  }, [activePackages, globalAdjustmentPct, overrides, modifierSelection, pricingState.vehicles, durationMultiplier, showHolidayPricing, holidayModifier]);
+  }, [activePackages, globalAdjustmentPct, overrides, modifierSelection, pricingState.vehicles, durationMultiplier, showHolidayPricing, holidayModifier, pricingState.pricingMode, pricingState.scenarioBData, pricingState.scenarioBWeights, getComputedBaseFn, targetExtraRev, assumedBookings]);
 
   // --- AVERAGES CALCULATION ---
   const averages = useMemo(() => {
@@ -243,7 +243,7 @@ export default function MultiVehicleDashboard({ setExportHandler }) {
       newWdRate: sumNewWdRate / Math.max(1, tableData.length),
       newWeRate: sumNewWeRate / Math.max(1, tableData.length),
     };
-  }, [tableData, pricingState.vehicles, activePackages, modifierSelection, globalAdjustmentPct, holidayModifier, showHolidayPricing, selectedHours, overrides, pricingState.pricingMode, pricingState.scenarioBWeights, pricingState.scenarioBData, targetExtraRev, assumedBookings]);
+  }, [tableData, pricingState.vehicles]);
 
   // --- CSV EXPORT LOGIC ---
   const exportCSV = () => {
